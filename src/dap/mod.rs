@@ -1,5 +1,6 @@
 mod dap_messenger;
 pub mod message;
+pub mod dap_interface;
 
 use crate::dap::dap_messenger::DapMessenger;
 use crate::dap::message::{InitializeRequestArguments, ProtocolMessage, RequestMessage};
@@ -13,6 +14,8 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 pub enum DapError {
     #[error("IO Error: {0}")]
     IoError(#[from] std::io::Error),
+    #[error("There is no loaded target")]
+    NoLoadedTarget,
     #[error("Failed to get DAP process stdin")]
     NoStdin,
     #[error("Failed to get DAP process stdout")]
@@ -66,7 +69,7 @@ impl DapInstance {
         self.last_seq
     }
 
-    pub fn launch(&mut self, backend_args_json: String) -> Result<(), DapError> {
+    pub fn launch(&mut self, backend_args_json: &str) -> Result<(), DapError> {
         let seq = self.next_seq();
         let message = ProtocolMessage::Request(RequestMessage::Initialize {
             seq,
@@ -77,11 +80,11 @@ impl DapInstance {
                 ..Default::default()
             },
         });
-        
+
         log::debug!("Initialize message: {message:?}");
         self.send_message(&message)?;
-        
-        let arguments = serde_json::from_str(&backend_args_json)?;
+
+        let arguments = serde_json::from_str(backend_args_json)?;
 
         let seq = self.next_seq();
         let message = ProtocolMessage::Request(RequestMessage::Launch { seq, arguments });
@@ -91,11 +94,11 @@ impl DapInstance {
 
         Ok(())
     }
-    
+
     pub fn send_message(&mut self, msg: &ProtocolMessage) -> Result<(), DapError> {
         self.send_message_json(&serde_json::to_string(msg)?)
     }
-    
+
     pub fn poll_message(&mut self) -> Option<ProtocolMessage> {
         match self.receiver.try_recv() {
             Ok(v) => Some(v),
@@ -106,7 +109,7 @@ impl DapInstance {
             }
         }
     }
-    
+
     fn send_message_json(&mut self, msg: &str) -> Result<(), DapError> {
         self.dap_messenger.send_message(msg)
     }

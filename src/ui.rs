@@ -1,12 +1,10 @@
-use crate::dap::DapInstance;
-use crate::dap::message::{DapEvent, ProtocolMessage, RequestMessage, ResponseMessage};
-use crate::data::breakpoints::BreakpointStore;
+use crate::dap::dap_interface::DapInterface;
 use crate::widget::SourceListing;
 use egui::panel::TopBottomSide;
 use egui::{Button, Context, Id, PopupCloseBehavior, Widget, popup_below_widget};
 use serde_json::json;
 use std::path::PathBuf;
-use std::rc::Rc;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 pub enum AppTab {
@@ -30,11 +28,9 @@ impl AppTab {
 const RENDER_TIME_NUM_SAMPLES: u32 = 60;
 
 pub struct MemVisorUi {
-    dap_instance: Option<DapInstance>,
     debugging: bool,
     selected_tab: usize,
     tabs: Vec<AppTab>,
-    breakpoints: Rc<BreakpointStore>,
     test: String,
 
     last_render_t: Instant,
@@ -46,11 +42,9 @@ pub struct MemVisorUi {
 impl MemVisorUi {
     pub fn new() -> Self {
         Self {
-            dap_instance: None,
             debugging: false,
             selected_tab: 0,
             tabs: Vec::new(),
-            breakpoints: Rc::new(BreakpointStore::new()),
             test: String::new(),
 
             last_render_t: Instant::now(),
@@ -60,12 +54,8 @@ impl MemVisorUi {
         }
     }
 
-    pub fn update(&mut self, ctx: &Context) {
-        if self.debugging {
-            // When debugging, avoid spending too long sleeping
-            // Rerender with at least 2 FPS
-            ctx.request_repaint_after(Duration::from_millis(500));
-        }
+    pub fn update(&mut self, ctx: &Context, dap_interface: Arc<DapInterface>) {
+        let _span = tracy_client::span!("ui_update");
 
         egui::TopBottomPanel::new(TopBottomSide::Top, Id::new("main-header")).show(ctx, |ui| {
             let file_res = ui.button("File");
@@ -88,7 +78,7 @@ impl MemVisorUi {
                             .pick_file();
                         if let Some(file) = file {
                             if let Ok(listing) =
-                                SourceListing::load(Rc::clone(&self.breakpoints), &file)
+                                SourceListing::load(Arc::clone(&dap_interface), &file)
                             {
                                 self.tabs.push(AppTab::Source(listing));
                             }
@@ -118,10 +108,9 @@ impl MemVisorUi {
             });
 
             if ui.button("Start").clicked() {
-                self.dap_instance =
-                    DapInstance::instance("test_backends/adapter/codelldb.exe").ok();
-                if let Some(instance) = &mut self.dap_instance {
-                    if let Err(e) = instance.launch(json!({
+                let res = dap_interface.load_target("test_backends/adapter/codelldb.exe");
+                if res.is_ok() {
+                    if let Err(e) = dap_interface.launch(json!({
                         "name": "launch",
                         "type": "lldb",
                         "request": "launch",
@@ -129,35 +118,12 @@ impl MemVisorUi {
                         "cwd": "C:/Users/Vanderley/Codigos_Gustavo/rose-engine-2",
                     }).to_string()) {
                         log::error!("Error: {e}");
+                    } else {
+                        self.debugging = true;
                     }
-                    self.debugging = true;
                 }
             }
 
-            if let Some(instance) = &mut self.dap_instance {
-                while let Some(msg) = instance.poll_message() {
-                    log::debug!("Received message: {msg:?}");
-                    match msg {
-                        ProtocolMessage::Response(ResponseMessage::Initialize { success, .. }) => {
-                            if success {
-                                let seq = instance.next_seq();
-                                instance.send_message(
-                                    &ProtocolMessage::Request(RequestMessage::ConfigurationDone {
-                                        seq,
-                                        arguments: None,
-                                    }),
-                                ).unwrap()
-                            } else {
-                                log::error!("Failed to initialize DAP");
-                            }
-                        },
-                        ProtocolMessage::Event(DapEvent::Terminated { .. }) => {
-                            self.debugging = false;
-                        },
-                        _ => {},
-                    }
-                }
-            }
         });
 
         self.render_time_acc += self.last_render_t.elapsed();

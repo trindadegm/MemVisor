@@ -70,6 +70,7 @@ impl EguiRenderer {
         window_surface_view: &TextureView,
         screen_descriptor: ScreenDescriptor,
     ) {
+        let _span = tracy_client::span!("egui_draw_frame");
         assert!(self.frame_started, "frame must be started before being drawn");
 
         self.set_pixels_per_point(screen_descriptor.pixels_per_point);

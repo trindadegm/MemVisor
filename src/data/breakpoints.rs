@@ -46,7 +46,7 @@ impl BreakpointStore {
         }
     }
     
-    pub fn remove(&self, breakpoint: Breakpoint) -> bool {
+    pub fn remove(&self, breakpoint: &Breakpoint) -> bool {
         let project_breakpoints = self.points.read().unwrap();
         if let Some(file_breakpoints) = project_breakpoints.get(&breakpoint.file) {
             let mut w_file_breakpoints = file_breakpoints.write().unwrap();

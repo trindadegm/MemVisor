@@ -5,7 +5,8 @@ edition = "2024"
 
 [dependencies]
 egui = "0.31"
-egui_extras = "0.31"
+egui_dock = "0.16"
+egui_extras = { version = "0.31", features = ["syntect"] }
 egui-wgpu = { version = "0.31", features = ["winit"] }
 egui-winit = "0.31"
 epaint = "0.31"
@@ -16,5 +17,21 @@ thiserror = "2.0"
 rfd = "0.15"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-syntect = "5.2"
+utally = "1.0"
 winit = "0.30"
+
+[dependencies.tracy-client]
+version = "0.18"
+default-features = false
+
+[features]
+tracy = [
+    "tracy-client/enable",
+    "tracy-client/system-tracing",
+    "tracy-client/context-switch-tracing",
+    "tracy-client/sampling",
+    "tracy-client/code-transfer",
+    "tracy-client/broadcast",
+    "tracy-client/callstack-inlines",
+    "tracy-client/crash-handler",
+]

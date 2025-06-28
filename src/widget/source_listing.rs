@@ -1,39 +1,47 @@
-use crate::data::breakpoints::{Breakpoint, BreakpointStore};
-use egui::{Color32, Response, ScrollArea, Ui, Widget};
-use epaint::text::{LayoutJob, TextWrapMode};
+use crate::dap::dap_interface::DapInterface;
+use crate::data::breakpoints::Breakpoint;
+use egui::{Response, ScrollArea, Ui, Widget};
+use epaint::FontId;
+use epaint::text::LayoutJob;
 use std::ffi::OsStr;
-use std::ops::Range;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub struct SourceCode {
     path: PathBuf,
     content: String,
 }
 
+const DEFAULT_LINE_HEIGHT_PX: f32 = 12.0;
+
 pub struct SourceListing {
+    dap_interface: Arc<DapInterface>,
     source_code: SourceCode,
-    breakpoint_store: Rc<BreakpointStore>,
     list_breakpoints: Vec<Breakpoint>,
+    lines: Vec<String>,
+    line_height_px: f32,
 }
 
 impl SourceListing {
     pub fn load(
-        breakpoints: Rc<BreakpointStore>,
+        dap_interface: Arc<DapInterface>,
         path: impl AsRef<Path>,
     ) -> Result<Self, std::io::Error> {
-        Self::_load(breakpoints, path.as_ref())
+        Self::_load(dap_interface, path.as_ref())
     }
 
-    fn _load(breakpoints: Rc<BreakpointStore>, path: &Path) -> Result<Self, std::io::Error> {
+    fn _load(dap_interface: Arc<DapInterface>, path: &Path) -> Result<Self, std::io::Error> {
         let content = std::fs::read_to_string(path)?;
+        let lines = content.lines().map(String::from).collect();
         Ok(Self {
+            dap_interface,
             source_code: SourceCode {
                 path: path.into(),
                 content,
             },
-            breakpoint_store: breakpoints,
             list_breakpoints: Vec::new(),
+            lines,
+            line_height_px: DEFAULT_LINE_HEIGHT_PX,
         })
     }
 
@@ -47,47 +55,49 @@ impl SourceListing {
 }
 impl Widget for &mut SourceListing {
     fn ui(self, ui: &mut Ui) -> Response {
-        self.breakpoint_store
+        let _span = tracy_client::span!("ui_update_source_listing");
+
+        self.dap_interface
             .get_file_breakpoints(&self.source_code.path, &mut self.list_breakpoints);
-        //let theme = egui_extras::syntax_highlighting::CodeTheme::from_memory(ui.ctx(), ui.style());
 
-        //let layout_job = egui_extras::syntax_highlighting::highlight(
-        //    ui.ctx(),
-        //    ui.style(),
-        //    &theme,
-        //    &self.source_code.content,
-        //    self.source_code
-        //        .path
-        //        .extension()
-        //        .and_then(OsStr::to_str)
-        //        .unwrap_or("txt"),
-        //);
+        ui.set_width(ui.available_width());
 
-        ScrollArea::both().show(ui, |ui| {
-            for (line_index, line) in self.source_code.content.lines().enumerate() {
-                let line_breakpoint = self
-                    .list_breakpoints
+        ScrollArea::both().show_rows(ui, self.line_height_px, self.lines.len(), |ui, range| {
+            ui.set_width(ui.available_width());
+            
+            let lines_in_range = &self.lines[range.clone()];
+            
+            for (i, line) in lines_in_range.iter().enumerate() {
+                let line_index = i + range.start;
+                
+                let line_breakpoint = self.list_breakpoints
                     .iter()
                     .find(|b| b.lineno == line_index + 1);
+                
                 let has_breakpoint = line_breakpoint.is_some();
+                
+                let job = LayoutJob::simple_singleline(
+                    line.clone(),
+                    FontId::monospace(self.line_height_px),
+                    ui.style().visuals.widgets.active.fg_stroke.color,
+                );
                 ui.horizontal(|ui| {
-                    if ui.selectable_label(has_breakpoint, "O").clicked() {
-                        if !has_breakpoint {
-                            self.breakpoint_store.add(Breakpoint {
-                                file: self.source_code.path.clone(),
-                                lineno: line_index + 1,
-                            });
+                    let set_bp_res = ui.add_sized(
+                        [self.line_height_px, self.line_height_px],
+                        egui::SelectableLabel::new(has_breakpoint, "O"),
+                    );
+                    if set_bp_res.clicked() {
+                        if let Some(bp) = line_breakpoint {
+                            self.dap_interface.remove_breakpoint(&bp);
                         } else {
-                            self.breakpoint_store.remove(Breakpoint {
-                                file: self.source_code.path.clone(),
+                            let path = self.source_code.path.clone();
+                            self.dap_interface.put_breakpoint(Breakpoint {
+                                file: path,
                                 lineno: line_index + 1,
                             });
                         }
-                    }
-                    ui.add(
-                        egui::Label::new(egui::RichText::new(line).monospace())
-                            .wrap_mode(TextWrapMode::Extend),
-                    );
+                    } 
+                    ui.label(job);
                 });
             }
         });

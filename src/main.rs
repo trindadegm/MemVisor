@@ -5,7 +5,7 @@ use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
-
+use crate::dap::dap_interface::DapInterface;
 use crate::ui::MemVisorUi;
 use crate::ui_renderer::EguiRenderer;
 
@@ -22,6 +22,7 @@ pub struct MemVisorState {
     pub surface: wgpu::Surface<'static>,
     pub scale_factor: f32,
     pub egui_renderer: EguiRenderer,
+    pub dap_interface: Arc<DapInterface>,
 }
 
 pub struct MemVisorApp {
@@ -35,9 +36,11 @@ fn main() {
     env_logger::init();
     log::info!("Log enabled");
 
+    let _ = tracy_client::Client::start();
+
     let event_loop = EventLoop::new().expect("should create event loop");
 
-    event_loop.set_control_flow(ControlFlow::Poll);
+    event_loop.set_control_flow(ControlFlow::Wait);
 
     let mut app = MemVisorApp::new();
     event_loop
@@ -109,6 +112,7 @@ impl MemVisorState {
             surface_config,
             egui_renderer,
             scale_factor,
+            dap_interface: Arc::new(DapInterface::new()),
         }
     }
 
@@ -162,6 +166,7 @@ impl MemVisorApp {
     }
 
     fn handle_redraw(&mut self) {
+        let _span = tracy_client::span!("handle_redraw");
         // Attempt to handle minimizing window
         if let Some(window) = self.window.as_ref() {
             if let Some(min) = window.is_minimized() {
@@ -208,9 +213,10 @@ impl MemVisorApp {
         let window = self.window.as_ref().unwrap();
 
         {
+            let _egui_frame = tracy_client::span!("egui_redraw");
             state.egui_renderer.begin_frame(window);
 
-            self.ui.update(state.egui_renderer.context());
+            self.ui.update(state.egui_renderer.context(), Arc::clone(&state.dap_interface));
 
             state.egui_renderer.draw_frame(
                 &state.device,
@@ -222,8 +228,13 @@ impl MemVisorApp {
             );
         }
 
-        state.queue.submit(Some(encoder.finish()));
-        surface_texture.present();
+        {
+            let _graphics_submit_span = tracy_client::span!("frame_submit");
+            state.queue.submit(Some(encoder.finish()));
+            surface_texture.present();
+
+            tracy_client::frame_mark();
+        }
     }
 }
 impl ApplicationHandler for MemVisorApp {
@@ -239,6 +250,8 @@ impl ApplicationHandler for MemVisorApp {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
+        let _span = tracy_client::span!("window_event");
+
         // let egui render to process the event first
         self.state
             .as_mut()
@@ -252,14 +265,26 @@ impl ApplicationHandler for MemVisorApp {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
+                tracy_client::Client::start().message("Redraw Requested", 0);
                 self.handle_redraw();
 
-                self.window.as_ref().unwrap().request_redraw();
+                let window = self.window.as_ref().expect("should have window");
+                let state = self.state.as_ref().expect("should have memvisor state");
+
+                if state.egui_renderer.context().has_requested_repaint() {
+                    tracy_client::Client::start().message("Repaint requested", 0);
+                    window.request_redraw();
+                }
+                return;
             }
             WindowEvent::Resized(new_size) => {
                 self.handle_resized(new_size.width, new_size.height);
             }
             _ => (),
+        }
+
+        if let Some(window) = self.window.as_ref() {
+            window.request_redraw();
         }
     }
 }
