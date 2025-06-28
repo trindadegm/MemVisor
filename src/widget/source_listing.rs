@@ -50,7 +50,6 @@ impl Widget for &mut SourceListing {
         self.breakpoint_store
             .get_file_breakpoints(&self.source_code.path, &mut self.list_breakpoints);
         //let theme = egui_extras::syntax_highlighting::CodeTheme::from_memory(ui.ctx(), ui.style());
-        ui.set_min_width(300.0);
 
         //let layout_job = egui_extras::syntax_highlighting::highlight(
         //    ui.ctx(),
@@ -66,16 +65,24 @@ impl Widget for &mut SourceListing {
 
         ScrollArea::both().show(ui, |ui| {
             for (line_index, line) in self.source_code.content.lines().enumerate() {
-                let has_breakpoint = self
+                let line_breakpoint = self
                     .list_breakpoints
                     .iter()
                     .find(|b| b.lineno == line_index + 1);
+                let has_breakpoint = line_breakpoint.is_some();
                 ui.horizontal(|ui| {
-                    if ui.selectable_label(has_breakpoint.is_some(), "O").clicked() {
-                        self.breakpoint_store.add(Breakpoint {
-                            file: self.source_code.path.clone(),
-                            lineno: line_index + 1,
-                        });
+                    if ui.selectable_label(has_breakpoint, "O").clicked() {
+                        if !has_breakpoint {
+                            self.breakpoint_store.add(Breakpoint {
+                                file: self.source_code.path.clone(),
+                                lineno: line_index + 1,
+                            });
+                        } else {
+                            self.breakpoint_store.remove(Breakpoint {
+                                file: self.source_code.path.clone(),
+                                lineno: line_index + 1,
+                            });
+                        }
                     }
                     ui.add(
                         egui::Label::new(egui::RichText::new(line).monospace())

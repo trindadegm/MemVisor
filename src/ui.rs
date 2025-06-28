@@ -2,13 +2,12 @@ use crate::dap::DapInstance;
 use crate::dap::message::{DapEvent, ProtocolMessage, RequestMessage, ResponseMessage};
 use crate::data::breakpoints::BreakpointStore;
 use crate::widget::SourceListing;
-use eframe::{CreationContext, Frame};
 use egui::panel::TopBottomSide;
 use egui::{Button, Context, Id, PopupCloseBehavior, Widget, popup_below_widget};
 use serde_json::json;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub enum AppTab {
     Source(SourceListing),
@@ -28,17 +27,24 @@ impl AppTab {
     }
 }
 
-pub struct MemVisorApp {
+const RENDER_TIME_NUM_SAMPLES: u32 = 60;
+
+pub struct MemVisorUi {
     dap_instance: Option<DapInstance>,
     debugging: bool,
     selected_tab: usize,
     tabs: Vec<AppTab>,
     breakpoints: Rc<BreakpointStore>,
     test: String,
+
+    last_render_t: Instant,
+    render_time_acc: Duration,
+    render_time_avg: Duration,
+    num_render_time_samples: u32,
 }
 
-impl MemVisorApp {
-    pub fn new(_cc: &CreationContext) -> Self {
+impl MemVisorUi {
+    pub fn new() -> Self {
         Self {
             dap_instance: None,
             debugging: false,
@@ -46,11 +52,15 @@ impl MemVisorApp {
             tabs: Vec::new(),
             breakpoints: Rc::new(BreakpointStore::new()),
             test: String::new(),
+
+            last_render_t: Instant::now(),
+            render_time_acc: Duration::new(0, 0),
+            render_time_avg: Duration::new(0, 0),
+            num_render_time_samples: 0,
         }
     }
-}
-impl eframe::App for MemVisorApp {
-    fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
+
+    pub fn update(&mut self, ctx: &Context) {
         if self.debugging {
             // When debugging, avoid spending too long sleeping
             // Rerender with at least 2 FPS
@@ -148,6 +158,27 @@ impl eframe::App for MemVisorApp {
                     }
                 }
             }
+        });
+
+        self.render_time_acc += self.last_render_t.elapsed();
+        self.num_render_time_samples += 1;
+        if self.num_render_time_samples >= RENDER_TIME_NUM_SAMPLES {
+            self.render_time_avg = self.render_time_acc / self.num_render_time_samples;
+            self.num_render_time_samples = 0;
+            self.render_time_acc = Duration::new(0, 0);
+        }
+        self.last_render_t = Instant::now();
+        egui::TopBottomPanel::new(TopBottomSide::Bottom, Id::new("main-footer")).show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                if self.render_time_avg.as_millis() < 10000 {
+                    ui.label(format!(
+                        "Average frame time: {}ms",
+                        self.render_time_avg.as_millis()
+                    ));
+                } else {
+                    ui.label("Average frame time: :D");
+                }
+            });
         });
     }
 }
