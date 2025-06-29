@@ -1,13 +1,14 @@
-use egui_wgpu::wgpu;
-use std::sync::Arc;
-use winit::application::ApplicationHandler;
-use winit::event::WindowEvent;
-use winit::event_loop::ActiveEventLoop;
-use winit::event_loop::{ControlFlow, EventLoop};
-use winit::window::{Window, WindowId};
 use crate::dap::dap_interface::DapInterface;
 use crate::ui::MemVisorUi;
 use crate::ui_renderer::EguiRenderer;
+use egui_wgpu::wgpu;
+use std::sync::Arc;
+use std::time::Duration;
+use winit::application::ApplicationHandler;
+use winit::event::{StartCause, WindowEvent};
+use winit::event_loop::ActiveEventLoop;
+use winit::event_loop::{ControlFlow, EventLoop};
+use winit::window::{Window, WindowId};
 
 mod dap;
 pub mod data;
@@ -40,7 +41,7 @@ fn main() {
 
     let event_loop = EventLoop::new().expect("should create event loop");
 
-    event_loop.set_control_flow(ControlFlow::Wait);
+    event_loop.set_control_flow(ControlFlow::wait_duration(Duration::from_millis(500)));
 
     let mut app = MemVisorApp::new();
     event_loop
@@ -216,7 +217,10 @@ impl MemVisorApp {
             let _egui_frame = tracy_client::span!("egui_redraw");
             state.egui_renderer.begin_frame(window);
 
-            self.ui.update(state.egui_renderer.context(), Arc::clone(&state.dap_interface));
+            self.ui.update(
+                state.egui_renderer.context(),
+                Arc::clone(&state.dap_interface),
+            );
 
             state.egui_renderer.draw_frame(
                 &state.device,
@@ -238,6 +242,18 @@ impl MemVisorApp {
     }
 }
 impl ApplicationHandler for MemVisorApp {
+    fn new_events(&mut self, _event_loop: &ActiveEventLoop, cause: StartCause) {
+        match cause {
+            StartCause::ResumeTimeReached {..} => {
+                tracy_client::Client::start().message("Resume time reached: redraw", 0);
+                if let Some(window) = self.window.as_ref() {
+                    window.request_redraw();
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window = event_loop
             .create_window(
@@ -253,9 +269,13 @@ impl ApplicationHandler for MemVisorApp {
         let _span = tracy_client::span!("window_event");
 
         // let egui render to process the event first
-        self.state
-            .as_mut()
-            .unwrap()
+        let w_state = self.state.as_mut().unwrap();
+
+        if let Err(e) = w_state.dap_interface.process_dap_events() {
+            log::error!("DAP Interface Error: {e}");
+        }
+
+        w_state
             .egui_renderer
             .handle_input(self.window.as_ref().unwrap(), &event);
 
@@ -267,15 +287,13 @@ impl ApplicationHandler for MemVisorApp {
             WindowEvent::RedrawRequested => {
                 tracy_client::Client::start().message("Redraw Requested", 0);
                 self.handle_redraw();
-
-                let window = self.window.as_ref().expect("should have window");
+                
+                let window = self.window.as_ref().expect("must have window here");
                 let state = self.state.as_ref().expect("should have memvisor state");
-
                 if state.egui_renderer.context().has_requested_repaint() {
                     tracy_client::Client::start().message("Repaint requested", 0);
                     window.request_redraw();
                 }
-                return;
             }
             WindowEvent::Resized(new_size) => {
                 self.handle_resized(new_size.width, new_size.height);
@@ -284,7 +302,15 @@ impl ApplicationHandler for MemVisorApp {
         }
 
         if let Some(window) = self.window.as_ref() {
-            window.request_redraw();
+            // We request redraw on every window event, except redraw requested.
+            // If we requested a redraw on a RedrawRequested event it would mean
+            // the app would always keep redrawing, nonstop.
+            if event != WindowEvent::RedrawRequested {
+                window.request_redraw();
+            }
         }
+
+        // By default try to run at 2 FPS even if there are no events
+        event_loop.set_control_flow(ControlFlow::wait_duration(Duration::from_millis(500)));
     }
 }
