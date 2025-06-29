@@ -87,15 +87,16 @@ impl Widget for &mut SourceListing {
                         egui::SelectableLabel::new(has_breakpoint, "O"),
                     );
                     if set_bp_res.clicked() {
-                        if let Some(bp) = line_breakpoint {
-                            self.dap_interface.remove_breakpoint(&bp);
+                        // TODO: Handle e
+                        let e = if let Some(bp) = line_breakpoint {
+                            self.dap_interface.remove_breakpoint(&bp)
                         } else {
                             let path = self.source_code.path.clone();
                             self.dap_interface.put_breakpoint(Breakpoint {
                                 file: path,
                                 lineno: line_index + 1,
-                            });
-                        }
+                            })
+                        };
                     } 
                     ui.label(job);
                 });
