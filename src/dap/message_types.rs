@@ -97,3 +97,26 @@ pub struct SourceBreakpoint {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mode: Option<String>,
 }
+
+// We'll do it little by little
+/// Set of DAP capabilities. Not all are defined here. Too many
+#[derive(Clone, Copy, Deserialize, Serialize, Default, Debug)]
+pub struct Capabilities {
+    #[serde(rename = "supportsConfigurationDoneRequest")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_configuration_done_request: Option<bool>,
+
+    #[serde(rename = "supportsSingleThreadExecutionRequests")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_single_thread_execution_requests: Option<bool>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub enum SteppingGranularity {
+    #[serde(rename = "statement")]
+    Statement,
+    #[serde(rename = "line")]
+    Line,
+    #[serde(rename = "instruction")]
+    Instruction,
+}

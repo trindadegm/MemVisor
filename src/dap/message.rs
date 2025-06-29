@@ -70,6 +70,10 @@ pub enum RequestMessage {
         /// Just send None for now.
         arguments: Option<serde_json::Value>,
     },
+    #[serde(rename = "next")]
+    Next {
+        arguments: NextArguments,
+    },
     /// Sets multiple breakpoints for a single source and clears all previous breakpoints in
     /// that source.
     ///
@@ -93,6 +97,8 @@ pub enum ResponseMessage {
         seq: u64,
         request_seq: u64,
         success: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        body: Option<Capabilities>,
     },
     #[serde(rename = "notStopped")]
     NotStopped,
@@ -122,6 +128,22 @@ pub struct InitializeArguments {
     pub adapter_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub locale: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug)]
+pub struct NextArguments {
+    /// Specifies the thread to resume execution for one step
+    #[serde(rename = "threadId")]
+    pub thread_id: u64,
+    /// If this flag is true, all other suspended threads are not resumed
+    #[serde(rename = "singleThread")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub single_thread: Option<bool>,
+    /// Stepping granularity. If none is specified, a default of [SteppingGranularity::Statement]
+    /// is assumed.
+    #[serde(rename = "steppingGranularity")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stepping_granularity: Option<SteppingGranularity>,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
