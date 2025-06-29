@@ -1,9 +1,10 @@
 mod dap_messenger;
 pub mod message;
 pub mod dap_interface;
+pub mod message_types;
 
 use crate::dap::dap_messenger::DapMessenger;
-use crate::dap::message::{InitializeRequestArguments, ProtocolMessage, RequestMessage};
+use crate::dap::message::{InitializeArguments, ProtocolMessage, RequestMessage};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Stdio};
@@ -73,7 +74,7 @@ impl DapInstance {
         let seq = self.next_seq();
         let message = ProtocolMessage::Request(RequestMessage::Initialize {
             seq,
-            arguments: InitializeRequestArguments {
+            arguments: InitializeArguments {
                 client_id: Some("memvisor".into()),
                 client_name: Some("MemVisor".into()),
                 adapter_id: "codelldb".into(),
