@@ -72,6 +72,7 @@ pub enum RequestMessage {
     },
     #[serde(rename = "next")]
     Next {
+        seq: u64,
         arguments: NextArguments,
     },
     /// Sets multiple breakpoints for a single source and clears all previous breakpoints in
@@ -185,7 +186,7 @@ pub struct DapEventOutput {
 
 #[cfg(test)]
 mod tests {
-    use crate::dap::message::{CancelArguments, ProtocolMessage, RequestMessage, ResponseMessage};
+    use crate::dap::message::{CancelArguments, ProtocolMessage, RequestMessage};
 
     #[test]
     fn test_serialize_request() {

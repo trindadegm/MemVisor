@@ -33,7 +33,9 @@ pub enum DapError {
 }
 
 pub struct DapInstance {
+    #[allow(unused)]
     exec_path: PathBuf,
+    #[allow(unused)]
     process: Child,
     last_seq: u64,
     dap_messenger: DapMessenger<ChildStdin>,

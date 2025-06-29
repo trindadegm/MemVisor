@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 pub struct SourceCode {
     path: PathBuf,
+    #[allow(unused)]
     content: String,
 }
 
@@ -87,8 +88,8 @@ impl Widget for &mut SourceListing {
                         egui::SelectableLabel::new(has_breakpoint, "O"),
                     );
                     if set_bp_res.clicked() {
-                        // TODO: Handle e
-                        let e = if let Some(bp) = line_breakpoint {
+                        // TODO: Handle error
+                        let _e = if let Some(bp) = line_breakpoint {
                             self.dap_interface.remove_breakpoint(&bp)
                         } else {
                             let path = self.source_code.path.clone();

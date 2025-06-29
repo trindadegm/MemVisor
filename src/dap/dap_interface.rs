@@ -1,9 +1,13 @@
-use crate::dap::message::{DapEvent, ProtocolMessage, RequestMessage, ResponseMessage, SetBreakpointsArguments};
-use crate::dap::{DapError, DapInstance};
+use crate::dap::message::{
+    DapEvent, NextArguments, ProtocolMessage, RequestMessage, ResponseMessage,
+    SetBreakpointsArguments,
+};
 use crate::dap::message_types;
+use crate::dap::{DapError, DapInstance};
 use crate::data::breakpoints::{Breakpoint, BreakpointStore};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
+use crate::dap::message_types::SteppingGranularity;
 
 type ProtectedOption<T> = Arc<RwLock<Option<T>>>;
 
@@ -35,14 +39,14 @@ impl DapInterface {
         if let Some(w_dap) = &mut *w_dap {
             w_dap.launch(launch_json.as_ref())?;
         } else {
-            return Err(DapError::NoLoadedTarget)
+            return Err(DapError::NoLoadedTarget);
         }
         Ok(())
     }
 
     pub fn process_dap_events(&self) -> Result<(), DapError> {
         let mut configuration_done = false;
-        
+
         {
             let mut instance_w = self.instance.write().unwrap();
             tracy_client::Client::start().message("process_dap_events_instance_w", 0);
@@ -51,7 +55,11 @@ impl DapInterface {
                 while let Some(msg) = dap_interface.poll_message() {
                     log::debug!("Received message: {msg:?}");
                     match msg {
-                        ProtocolMessage::Response(ResponseMessage::Initialize { success, body, .. }) => {
+                        ProtocolMessage::Response(ResponseMessage::Initialize {
+                            success,
+                            body,
+                            ..
+                        }) => {
                             if success {
                                 configuration_done = true;
                                 if let Some(cap) = &body {
@@ -67,7 +75,7 @@ impl DapInterface {
                 }
             }
         }
-        
+
         if configuration_done {
             self.update_all_breakpoints()?;
 
@@ -75,17 +83,16 @@ impl DapInterface {
                 let mut instance_w = self.instance.write().unwrap();
                 if let Some(dap_interface) = instance_w.as_mut() {
                     let seq = dap_interface.next_seq();
-                    dap_interface
-                        .send_message(&ProtocolMessage::Request(
-                            RequestMessage::ConfigurationDone {
-                                seq,
-                                arguments: None,
-                            },
-                        ))?;
+                    dap_interface.send_message(&ProtocolMessage::Request(
+                        RequestMessage::ConfigurationDone {
+                            seq,
+                            arguments: None,
+                        },
+                    ))?;
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -110,12 +117,13 @@ impl DapInterface {
                 path: Some(file.to_string_lossy().into()),
                 ..Default::default()
             };
-            let breakpoints = list.iter().map(|bp| {
-                message_types::SourceBreakpoint {
+            let breakpoints = list
+                .iter()
+                .map(|bp| message_types::SourceBreakpoint {
                     line: bp.lineno,
                     ..Default::default()
-                }
-            }).collect();
+                })
+                .collect();
 
             let seq = instance.next_seq();
             let msg = ProtocolMessage::Request(RequestMessage::SetBreakpoints {
@@ -150,11 +158,27 @@ impl DapInterface {
         self.breakpoints.remove(&breakpoint);
         self.update_breakpoints_for_file(&breakpoint.file)
     }
-    
-    pub fn request_next(&self) {
+
+    pub fn request_next(&self) -> Result<(), DapError> {
         let mut instance_w = self.instance.write().unwrap();
         if let Some(instance) = instance_w.as_mut() {
-            //instance.send_message(ProtocolMessage::Request())
+            let seq = instance.next_seq();
+
+            // If step single thread is supported, we'll use it
+            let single_thread = instance
+                .get_capabilities()
+                .supports_single_thread_execution_requests;
+
+            instance.send_message(&ProtocolMessage::Request(RequestMessage::Next {
+                seq,
+                arguments: NextArguments {
+                    single_thread,
+                    stepping_granularity: Some(SteppingGranularity::Statement),
+                    ..Default::default()
+                },
+            }))?;
         }
+
+        Ok(())
     }
 }
