@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::message_types::*;
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type")]
 pub enum ProtocolMessage {
@@ -35,7 +37,7 @@ pub enum RequestMessage {
     #[serde(rename = "initialize")]
     Initialize {
         seq: u64,
-        arguments: InitializeRequestArguments,
+        arguments: InitializeArguments,
     },
     /// The attach request is sent from the client to the debug adapter to attach
     /// to a debuggee that is already running.
@@ -68,6 +70,15 @@ pub enum RequestMessage {
         /// Just send None for now.
         arguments: Option<serde_json::Value>,
     },
+    /// Sets multiple breakpoints for a single source and clears all previous breakpoints in
+    /// that source.
+    ///
+    /// To clear all breakpoint for a source, specify an empty array.
+    #[serde(rename = "setBreakpoints")]
+    SetBreakpoints {
+        seq: u64,
+        arguments: SetBreakpointsArguments,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -98,7 +109,7 @@ pub struct CancelArguments {
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
-pub struct InitializeRequestArguments {
+pub struct InitializeArguments {
     #[serde(rename = "clientID")]
     pub client_id: Option<String>,
     #[serde(rename = "clientName")]
@@ -106,6 +117,18 @@ pub struct InitializeRequestArguments {
     #[serde(rename = "adapterID")]
     pub adapter_id: String,
     pub locale: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug)]
+pub struct SetBreakpointsArguments {
+    /// The source location of the breakpoint. Either `path` or `source_reference` must be
+    /// specified.
+    pub source: Source,
+    /// The code locations of the breakpoints.
+    pub breakpoints: Option<Vec<SourceBreakpoint>>,
+    /// Indicates that the underlying source code has been modified.
+    #[serde(rename = "sourceModified")]
+    pub source_modified: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -120,22 +143,6 @@ pub enum DapEvent {
     Terminated {
         seq: u64,
     },
-    #[serde(other)]
-    Unknown,
-}
-
-#[derive(Deserialize, Serialize, Debug)]
-pub enum DapEventOutputCategory {
-    #[serde(rename = "console")]
-    Console,
-    #[serde(rename = "important")]
-    Important,
-    #[serde(rename = "stdout")]
-    Stdout,
-    #[serde(rename = "stderr")]
-    Stderr,
-    #[serde(rename = "telemetry")]
-    Telemetry,
     #[serde(other)]
     Unknown,
 }
