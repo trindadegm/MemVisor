@@ -51,9 +51,12 @@ impl DapInterface {
                 while let Some(msg) = dap_interface.poll_message() {
                     log::debug!("Received message: {msg:?}");
                     match msg {
-                        ProtocolMessage::Response(ResponseMessage::Initialize { success, .. }) => {
+                        ProtocolMessage::Response(ResponseMessage::Initialize { success, body, .. }) => {
                             if success {
                                 configuration_done = true;
+                                if let Some(cap) = &body {
+                                    dap_interface.set_capabilities(*cap);
+                                }
                             } else {
                                 log::error!("Failed to initialize DAP");
                             }
@@ -130,6 +133,14 @@ impl DapInterface {
         Ok(())
     }
 
+    pub fn get_files_with_breakpoints(&self, out: &mut Vec<PathBuf>) {
+        self.breakpoints.get_files(out);
+    }
+
+    pub fn get_file_breakpoints(&self, file: impl AsRef<Path>, out: &mut Vec<Breakpoint>) {
+        self.breakpoints.get_file_breakpoints(file, out);
+    }
+
     pub fn put_breakpoint(&self, breakpoint: Breakpoint) -> Result<(), DapError> {
         self.breakpoints.add(breakpoint.clone());
         self.update_breakpoints_for_file(&breakpoint.file)
@@ -139,12 +150,11 @@ impl DapInterface {
         self.breakpoints.remove(&breakpoint);
         self.update_breakpoints_for_file(&breakpoint.file)
     }
-
-    pub fn get_files_with_breakpoints(&self, out: &mut Vec<PathBuf>) {
-        self.breakpoints.get_files(out);
-    }
-
-    pub fn get_file_breakpoints(&self, file: impl AsRef<Path>, out: &mut Vec<Breakpoint>) {
-        self.breakpoints.get_file_breakpoints(file, out);
+    
+    pub fn request_next(&self) {
+        let mut instance_w = self.instance.write().unwrap();
+        if let Some(instance) = instance_w.as_mut() {
+            //instance.send_message(ProtocolMessage::Request())
+        }
     }
 }

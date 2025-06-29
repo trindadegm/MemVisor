@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Stdio};
 use std::str::Utf8Error;
 use std::sync::mpsc::{Receiver, TryRecvError};
+use crate::dap::message_types::Capabilities;
 
 #[derive(thiserror::Error, Debug)]
 pub enum DapError {
@@ -37,6 +38,7 @@ pub struct DapInstance {
     last_seq: u64,
     dap_messenger: DapMessenger<ChildStdin>,
     receiver: Receiver<ProtocolMessage>,
+    capabilities: Capabilities,
 }
 
 impl DapInstance {
@@ -62,6 +64,7 @@ impl DapInstance {
             last_seq: 0,
             dap_messenger,
             receiver: rx,
+            capabilities: Capabilities::default(),
         })
     }
 
@@ -113,5 +116,13 @@ impl DapInstance {
 
     fn send_message_json(&mut self, msg: &str) -> Result<(), DapError> {
         self.dap_messenger.send_message(msg)
+    }
+
+    pub fn get_capabilities(&self) -> &Capabilities {
+        &self.capabilities
+    }
+
+    pub fn set_capabilities(&mut self, cap: Capabilities) {
+        self.capabilities = cap;
     }
 }
