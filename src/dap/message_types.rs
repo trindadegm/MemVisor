@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Debug)]
-pub enum DapEventOutputCategory {
+pub enum OutputEventCategory {
     #[serde(rename = "console")]
     Console,
     #[serde(rename = "important")]
@@ -12,6 +12,30 @@ pub enum DapEventOutputCategory {
     Stderr,
     #[serde(rename = "telemetry")]
     Telemetry,
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub enum StoppedEventReason {
+    #[serde(rename = "step")]
+    Step,
+    #[serde(rename = "breakpoint")]
+    Breakpoint,
+    #[serde(rename = "exception")]
+    Exception,
+    #[serde(rename = "pause")]
+    Pause,
+    #[serde(rename = "entry")]
+    Entry,
+    #[serde(rename = "goto")]
+    Goto,
+    #[serde(rename = "function breakpoint")]
+    FunctionBreakpoint,
+    #[serde(rename = "data breakpoint")]
+    DataBreakpoint,
+    #[serde(rename = "instruction breakpoint")]
+    InstructionBreakpoint,
     #[serde(other)]
     Unknown,
 }

@@ -6,7 +6,7 @@ use crate::dap::message_types;
 use crate::dap::{DapError, DapInstance};
 use crate::data::breakpoints::{Breakpoint, BreakpointStore};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use crate::dap::message_types::SteppingGranularity;
 
 type ProtectedOption<T> = Arc<RwLock<Option<T>>>;
@@ -23,6 +23,7 @@ pub enum DebugState {
 pub struct DapInterface {
     instance: ProtectedOption<DapInstance>,
     breakpoints: BreakpointStore,
+    debug_state: Mutex<DebugState>,
 }
 
 impl DapInterface {
@@ -30,6 +31,7 @@ impl DapInterface {
         Self {
             instance: Default::default(),
             breakpoints: BreakpointStore::new(),
+            debug_state: Mutex::new(DebugState::Paused),
         }
     }
 
@@ -203,5 +205,9 @@ impl DapInterface {
         }
 
         Ok(())
+    }
+    
+    pub fn get_debug_state(&self) -> DebugState {
+        self.debug_state.lock().unwrap().clone()
     }
 }

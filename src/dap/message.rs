@@ -167,7 +167,12 @@ pub enum DapEvent {
     #[serde(rename = "output")]
     Output {
         seq: u64,
-        body: DapEventOutput,
+        body: OutputEvent,
+    },
+    #[serde(rename = "stopped")]
+    Stopped {
+        seq: u64,
+        body: StoppedEvent,
     },
     #[serde(rename = "terminated")]
     Terminated {
@@ -178,10 +183,40 @@ pub enum DapEvent {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
-pub struct DapEventOutput {
+pub struct OutputEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
-    category: Option<DapEventOutputCategory>,
+    category: Option<OutputEventCategory>,
     output: String,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct StoppedEvent {
+    /// The reason for the stoppage
+    reason: StoppedEventReason,
+    /// A description of the stoppage
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    /// The thread which was stopped
+    #[serde(rename = "threadId")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thread_id: Option<u64>,
+    /// Hint that the client should not change focus
+    #[serde(rename = "preserveFocusHint")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    preserve_focus_hint: Option<bool>,
+    /// Additional information. Ex: If the reason is exception, contains the exception name,
+    /// to show it on the UI.
+    #[serde(rename = "text")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    text: Option<String>,
+    /// If true, then all threads have been stopped
+    #[serde(rename = "allThreadsStopped")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    all_threads_stopped: Option<bool>,
+    /// A list of the breakpoints that triggered the event
+    #[serde(rename = "hitBreakpointIds")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hit_breakpoint_ids: Option<Vec<u64>>,
 }
 
 #[cfg(test)]

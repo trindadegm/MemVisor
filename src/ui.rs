@@ -80,6 +80,10 @@ impl MemVisorUi {
                         }
                     }
                 }
+                
+                if ui.button("Step").clicked() {
+                    dap_interface.request_next().expect("TODO remove this panic");
+                }
 
                 popup_below_widget(
                     ui,
