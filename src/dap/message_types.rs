@@ -48,39 +48,52 @@ pub enum SourcePresentationHint {
 #[derive(Deserialize, Serialize, Default, Debug)]
 pub struct Source {
     /// Short name of the source
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     /// The path of the source to be shown in the UI
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
     /// If this value is > 0 then the contents of the source must be retrieved through
     /// the 'source' request even when the path is specified.
     /// This is only valid for one session.
     #[serde(rename = "sourceReference")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub source_reference: Option<usize>,
     /// A hint for how to present the source in the UI
     /// [SourcePresentationHint::Deemphasize] can be used to indicate that the source is not
     /// available or that it is skipped on stepping.
     #[serde(rename = "presentationHint")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub presentation_hint: Option<SourcePresentationHint>,
     /// The origin of this source
     /// Ex: 'internal module', 'inline content from source map', maybe some other things idk.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub origin: Option<String>,
     /// A list of sources that are related to this source.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sources: Option<Vec<Source>>,
     /// Additional data that the DAP might want to loop through the client. Leave it intact.
     #[serde(rename = "adapterData")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub adapter_data: Option<serde_json::Value>,
     /// The checksums associated with this file
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub checksums: Option<Checksum>,
 }
 
 #[derive(Deserialize, Serialize, Default, Debug)]
 pub struct SourceBreakpoint {
     pub line: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub column: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub condition: Option<String>,
     #[serde(rename = "hitCondition")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub hit_condition: Option<String>,
     #[serde(rename = "logMessage")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub log_message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub mode: Option<String>,
 }

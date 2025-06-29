@@ -103,19 +103,24 @@ pub enum ResponseMessage {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CancelArguments {
     #[serde(rename = "requestId")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub request_id: Option<u64>,
     #[serde(rename = "progressId")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub progress_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub struct InitializeArguments {
     #[serde(rename = "clientID")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub client_id: Option<String>,
     #[serde(rename = "clientName")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub client_name: Option<String>,
     #[serde(rename = "adapterID")]
     pub adapter_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub locale: Option<String>,
 }
 
@@ -125,9 +130,11 @@ pub struct SetBreakpointsArguments {
     /// specified.
     pub source: Source,
     /// The code locations of the breakpoints.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub breakpoints: Option<Vec<SourceBreakpoint>>,
     /// Indicates that the underlying source code has been modified.
     #[serde(rename = "sourceModified")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub source_modified: Option<bool>,
 }
 
@@ -149,6 +156,7 @@ pub enum DapEvent {
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct DapEventOutput {
+    #[serde(skip_serializing_if = "Option::is_none")]
     category: Option<DapEventOutputCategory>,
     output: String,
 }
@@ -179,7 +187,7 @@ mod tests {
         let arguments = val.get("arguments").unwrap();
 
         assert_eq!(arguments.get("requestId").unwrap().as_u64().unwrap(), 4);
-        assert!(arguments.get("progressId").unwrap().is_null());
+        assert!(arguments.get("progressId").is_none());
     }
 
     #[test]
