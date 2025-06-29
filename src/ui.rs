@@ -25,13 +25,12 @@ impl AppTab {
     }
 }
 
-const RENDER_TIME_NUM_SAMPLES: u32 = 60;
+const RENDER_TIME_NUM_SAMPLES: u32 = 10;
 
 pub struct MemVisorUi {
     debugging: bool,
     selected_tab: usize,
     tabs: Vec<AppTab>,
-    test: String,
 
     last_render_t: Instant,
     render_time_acc: Duration,
@@ -45,7 +44,6 @@ impl MemVisorUi {
             debugging: false,
             selected_tab: 0,
             tabs: Vec::new(),
-            test: String::new(),
 
             last_render_t: Instant::now(),
             render_time_acc: Duration::new(0, 0),
@@ -58,34 +56,53 @@ impl MemVisorUi {
         let _span = tracy_client::span!("ui_update");
 
         egui::TopBottomPanel::new(TopBottomSide::Top, Id::new("main-header")).show(ctx, |ui| {
-            let file_res = ui.button("File");
-            let popup_id = Id::new("main-file-popup");
+            ui.horizontal(|ui| {
+                let file_res = ui.button("File");
+                let popup_id = Id::new("main-file-popup");
 
-            if file_res.clicked() {
-                ui.memory_mut(|mem| mem.toggle_popup(popup_id));
-            }
+                if file_res.clicked() {
+                    ui.memory_mut(|mem| mem.toggle_popup(popup_id));
+                }
 
-            popup_below_widget(
-                ui,
-                popup_id,
-                &file_res,
-                PopupCloseBehavior::CloseOnClick,
-                |ui| {
-                    ui.set_min_width(120.0);
-                    if ui.add(Button::new("Open").frame(false)).clicked() {
-                        let file = rfd::FileDialog::new()
-                            .set_directory(std::env::current_dir().unwrap_or(PathBuf::new()))
-                            .pick_file();
-                        if let Some(file) = file {
-                            if let Ok(listing) =
-                                SourceListing::load(Arc::clone(&dap_interface), &file)
-                            {
-                                self.tabs.push(AppTab::Source(listing));
-                            }
+                if ui.button("Start").clicked() {
+                    let res = dap_interface.load_target("test_backends/adapter/codelldb.exe");
+                    if res.is_ok() {
+                        if let Err(e) = dap_interface.launch(json!({
+                        "name": "launch",
+                        "type": "lldb",
+                        "request": "launch",
+                        "program": "C:/Users/Vanderley/Codigos_Gustavo/rose-engine-2/target/debug/game.exe",
+                        "cwd": "C:/Users/Vanderley/Codigos_Gustavo/rose-engine-2",
+                    }).to_string()) {
+                            log::error!("Error: {e}");
+                        } else {
+                            self.debugging = true;
                         }
                     }
-                },
-            );
+                }
+
+                popup_below_widget(
+                    ui,
+                    popup_id,
+                    &file_res,
+                    PopupCloseBehavior::CloseOnClick,
+                    |ui| {
+                        ui.set_min_width(120.0);
+                        if ui.add(Button::new("Open").frame(false)).clicked() {
+                            let file = rfd::FileDialog::new()
+                                .set_directory(std::env::current_dir().unwrap_or(PathBuf::new()))
+                                .pick_file();
+                            if let Some(file) = file {
+                                if let Ok(listing) =
+                                    SourceListing::load(Arc::clone(&dap_interface), &file)
+                                {
+                                    self.tabs.push(AppTab::Source(listing));
+                                }
+                            }
+                        }
+                    },
+                );
+            });
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -101,29 +118,6 @@ impl MemVisorUi {
             if let Some(tab) = first_listing {
                 ui.add(tab.widget());
             }
-
-            ui.horizontal(|ui| {
-                ui.label("This is a test:");
-                ui.text_edit_singleline(&mut self.test);
-            });
-
-            if ui.button("Start").clicked() {
-                let res = dap_interface.load_target("test_backends/adapter/codelldb.exe");
-                if res.is_ok() {
-                    if let Err(e) = dap_interface.launch(json!({
-                        "name": "launch",
-                        "type": "lldb",
-                        "request": "launch",
-                        "program": "C:/Users/Vanderley/Codigos_Gustavo/rose-engine-2/target/debug/game.exe",
-                        "cwd": "C:/Users/Vanderley/Codigos_Gustavo/rose-engine-2",
-                    }).to_string()) {
-                        log::error!("Error: {e}");
-                    } else {
-                        self.debugging = true;
-                    }
-                }
-            }
-
         });
 
         self.render_time_acc += self.last_render_t.elapsed();
