@@ -11,6 +11,15 @@ use crate::dap::message_types::SteppingGranularity;
 
 type ProtectedOption<T> = Arc<RwLock<Option<T>>>;
 
+#[derive(Clone, Debug)]
+pub enum DebugState {
+    Running,
+    Paused,
+    StoppedAtBreakpoint {
+        breakpoint: Breakpoint,
+    }
+}
+
 pub struct DapInterface {
     instance: ProtectedOption<DapInstance>,
     breakpoints: BreakpointStore,
@@ -119,6 +128,12 @@ impl DapInterface {
             };
             let breakpoints = list
                 .iter()
+                .filter_map(|bp| {
+                    match bp {
+                        Breakpoint::Source(b) => Some(b),
+                        _ => None,
+                    }
+                })
                 .map(|bp| message_types::SourceBreakpoint {
                     line: bp.lineno,
                     ..Default::default()
@@ -151,12 +166,20 @@ impl DapInterface {
 
     pub fn put_breakpoint(&self, breakpoint: Breakpoint) -> Result<(), DapError> {
         self.breakpoints.add(breakpoint.clone());
-        self.update_breakpoints_for_file(&breakpoint.file)
+        match breakpoint {
+            Breakpoint::Source(code_bp) => {
+                self.update_breakpoints_for_file(code_bp.file.as_ref())
+            }
+        }
     }
 
     pub fn remove_breakpoint(&self, breakpoint: &Breakpoint) -> Result<(), DapError> {
         self.breakpoints.remove(&breakpoint);
-        self.update_breakpoints_for_file(&breakpoint.file)
+        match breakpoint {
+            Breakpoint::Source(code_bp) => {
+                self.update_breakpoints_for_file(code_bp.file.as_ref())
+            }
+        }
     }
 
     pub fn request_next(&self) -> Result<(), DapError> {

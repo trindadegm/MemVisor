@@ -1,16 +1,31 @@
 use egui::ahash::HashMap;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
+
+#[derive(Clone, Debug)]
+pub enum Breakpoint {
+    Source(CodeBreakpoint)
+}
+
+impl Breakpoint {
+    pub fn on_source(file: impl Into<PathBuf>, lineno: usize) -> Self {
+        Self::Source(CodeBreakpoint {
+            file: Arc::new(file.into()),
+            lineno,
+        })
+    }
+}
 
 #[derive(Clone, Default, Debug)]
-pub struct Breakpoint {
-    pub file: PathBuf,
+pub struct CodeBreakpoint {
+    // The Arc is so that we can clone this crap. It should never change anyway
+    pub file: Arc<PathBuf>,
     pub lineno: usize,
 }
 
 /// For each line of the file (usize), we can have a breakpoint
-type FileBreakpoints = BTreeMap<usize, Breakpoint>;
+type FileBreakpoints = BTreeMap<usize, CodeBreakpoint>;
 /// We protect them to be able to access them from multiple threads
 type ProtectedFileBreakpoints = RwLock<FileBreakpoints>;
 /// A project has breakpoints of several files
@@ -30,37 +45,45 @@ impl BreakpointStore {
     }
 
     pub fn add(&self, breakpoint: Breakpoint) {
-        let project_breakpoints = self.points.read().unwrap();
-        if let Some(file_breakpoints) = project_breakpoints.get(&breakpoint.file) {
-            let mut w_file_breakpoints = file_breakpoints.write().unwrap();
-            w_file_breakpoints.insert(breakpoint.lineno, breakpoint);
-        } else {
-            drop(project_breakpoints);
+        match breakpoint {
+            Breakpoint::Source(code_bp) => {
+                let project_breakpoints = self.points.read().unwrap();
+                if let Some(file_breakpoints) = project_breakpoints.get(code_bp.file.as_ref()) {
+                    let mut w_file_breakpoints = file_breakpoints.write().unwrap();
+                    w_file_breakpoints.insert(code_bp.lineno, code_bp);
+                } else {
+                    drop(project_breakpoints);
 
-            let file = breakpoint.file.clone();
-            let mut file_breakpoints: FileBreakpoints = BTreeMap::default();
-            file_breakpoints.insert(breakpoint.lineno, breakpoint);
+                    let file = code_bp.file.as_ref().clone();
+                    let mut file_breakpoints: FileBreakpoints = BTreeMap::default();
+                    file_breakpoints.insert(code_bp.lineno, code_bp);
 
-            let mut w_project_breakpoints = self.points.write().unwrap();
-            w_project_breakpoints.insert(file, RwLock::new(file_breakpoints));
+                    let mut w_project_breakpoints = self.points.write().unwrap();
+                    w_project_breakpoints.insert(file, RwLock::new(file_breakpoints));
+                }
+            }
         }
     }
     
     pub fn remove(&self, breakpoint: &Breakpoint) -> bool {
-        let project_breakpoints = self.points.read().unwrap();
-        if let Some(file_breakpoints) = project_breakpoints.get(&breakpoint.file) {
-            let mut w_file_breakpoints = file_breakpoints.write().unwrap();
-            w_file_breakpoints.remove(&breakpoint.lineno);
-            if w_file_breakpoints.is_empty() {
-                drop(w_file_breakpoints);
-                drop(project_breakpoints);
+        match breakpoint {
+            Breakpoint::Source(code_bp) => {
+                let project_breakpoints = self.points.read().unwrap();
+                if let Some(file_breakpoints) = project_breakpoints.get(code_bp.file.as_ref()) {
+                    let mut w_file_breakpoints = file_breakpoints.write().unwrap();
+                    w_file_breakpoints.remove(&code_bp.lineno);
+                    if w_file_breakpoints.is_empty() {
+                        drop(w_file_breakpoints);
+                        drop(project_breakpoints);
 
-                let mut w_project_breakpoints = self.points.write().unwrap();
-                w_project_breakpoints.remove(&breakpoint.file);
+                        let mut w_project_breakpoints = self.points.write().unwrap();
+                        w_project_breakpoints.remove(code_bp.file.as_ref());
+                    }
+                    return true;
+                }
             }
-            return true;
         }
-        
+
         false
     }
     
@@ -75,7 +98,7 @@ impl BreakpointStore {
         if let Some(file_breakpoints) = project_breakpoints.get(file) {
             let file_breakpoints = file_breakpoints.read().unwrap();
             for (_lineno, breakpoint) in file_breakpoints.iter() {
-                out.push(breakpoint.clone());
+                out.push(Breakpoint::Source(breakpoint.clone()));
             }
         }
     }
