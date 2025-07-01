@@ -72,7 +72,7 @@ where
         json_scratchpad.resize(content_length, 0);
         reader.read_exact(&mut json_scratchpad[..])?;
 
-        let json_str = str::from_utf8(&json_scratchpad[..])?;
+        let json_str = std::str::from_utf8(&json_scratchpad[..])?;
 
         let message = serde_json::from_str(json_str)?;
 

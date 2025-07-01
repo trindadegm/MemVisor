@@ -1,5 +1,5 @@
 use crate::dap::dap_interface::DapInterface;
-use crate::data::breakpoints::Breakpoint;
+use crate::data::breakpoints::{Breakpoint, CodeBreakpoint};
 use egui::{Response, ScrollArea, Ui, Widget};
 use epaint::FontId;
 use epaint::text::LayoutJob;
@@ -73,6 +73,10 @@ impl Widget for &mut SourceListing {
                 
                 let line_breakpoint = self.list_breakpoints
                     .iter()
+                    .filter_map(|b| match b {
+                        Breakpoint::Source(b) => Some(b),
+                        _ => None,
+                    })
                     .find(|b| b.lineno == line_index + 1);
                 
                 let has_breakpoint = line_breakpoint.is_some();
@@ -90,13 +94,10 @@ impl Widget for &mut SourceListing {
                     if set_bp_res.clicked() {
                         // TODO: Handle error
                         let _e = if let Some(bp) = line_breakpoint {
-                            self.dap_interface.remove_breakpoint(&bp)
+                            self.dap_interface.remove_breakpoint(&Breakpoint::Source(bp.clone()))
                         } else {
                             let path = self.source_code.path.clone();
-                            self.dap_interface.put_breakpoint(Breakpoint {
-                                file: path,
-                                lineno: line_index + 1,
-                            })
+                            self.dap_interface.put_breakpoint(Breakpoint::on_source(path, line_index + 1))
                         };
                     } 
                     ui.label(job);
