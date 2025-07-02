@@ -1,43 +1,22 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Serialize, Debug)]
-pub enum OutputEventCategory {
-    #[serde(rename = "console")]
-    Console,
-    #[serde(rename = "important")]
-    Important,
-    #[serde(rename = "stdout")]
-    Stdout,
-    #[serde(rename = "stderr")]
-    Stderr,
-    #[serde(rename = "telemetry")]
-    Telemetry,
-    #[serde(other)]
-    Unknown,
+// We'll do it little by little
+/// Set of DAP capabilities. Not all are defined here. Too many
+#[derive(Clone, Copy, Deserialize, Serialize, Default, Debug)]
+pub struct Capabilities {
+    #[serde(rename = "supportsConfigurationDoneRequest")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_configuration_done_request: Option<bool>,
+
+    #[serde(rename = "supportsSingleThreadExecutionRequests")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_single_thread_execution_requests: Option<bool>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
-pub enum StoppedEventReason {
-    #[serde(rename = "step")]
-    Step,
-    #[serde(rename = "breakpoint")]
-    Breakpoint,
-    #[serde(rename = "exception")]
-    Exception,
-    #[serde(rename = "pause")]
-    Pause,
-    #[serde(rename = "entry")]
-    Entry,
-    #[serde(rename = "goto")]
-    Goto,
-    #[serde(rename = "function breakpoint")]
-    FunctionBreakpoint,
-    #[serde(rename = "data breakpoint")]
-    DataBreakpoint,
-    #[serde(rename = "instruction breakpoint")]
-    InstructionBreakpoint,
-    #[serde(other)]
-    Unknown,
+pub struct Checksum {
+    pub algorithm: ChecksumAlgorithm,
+    pub checksum: String,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -53,19 +32,19 @@ pub enum ChecksumAlgorithm {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
-pub struct Checksum {
-    pub algorithm: ChecksumAlgorithm,
-    pub checksum: String,
-}
-
-#[derive(Deserialize, Serialize, Debug)]
-pub enum SourcePresentationHint {
-    #[serde(rename = "normal")]
-    Normal,
-    #[serde(rename = "emphasize")]
-    Emphasize,
-    #[serde(rename = "deemphasize")]
-    Deemphasize,
+pub enum OutputEventCategory {
+    #[serde(rename = "console")]
+    Console,
+    #[serde(rename = "important")]
+    Important,
+    #[serde(rename = "stdout")]
+    Stdout,
+    #[serde(rename = "stderr")]
+    Stderr,
+    #[serde(rename = "telemetry")]
+    Telemetry,
+    #[serde(other)]
+    Unknown,
 }
 
 /// A [Source] is a descriptor for source code
@@ -122,17 +101,14 @@ pub struct SourceBreakpoint {
     pub mode: Option<String>,
 }
 
-// We'll do it little by little
-/// Set of DAP capabilities. Not all are defined here. Too many
-#[derive(Clone, Copy, Deserialize, Serialize, Default, Debug)]
-pub struct Capabilities {
-    #[serde(rename = "supportsConfigurationDoneRequest")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub supports_configuration_done_request: Option<bool>,
-
-    #[serde(rename = "supportsSingleThreadExecutionRequests")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub supports_single_thread_execution_requests: Option<bool>,
+#[derive(Deserialize, Serialize, Debug)]
+pub enum SourcePresentationHint {
+    #[serde(rename = "normal")]
+    Normal,
+    #[serde(rename = "emphasize")]
+    Emphasize,
+    #[serde(rename = "deemphasize")]
+    Deemphasize,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -143,4 +119,28 @@ pub enum SteppingGranularity {
     Line,
     #[serde(rename = "instruction")]
     Instruction,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub enum StoppedEventReason {
+    #[serde(rename = "step")]
+    Step,
+    #[serde(rename = "breakpoint")]
+    Breakpoint,
+    #[serde(rename = "exception")]
+    Exception,
+    #[serde(rename = "pause")]
+    Pause,
+    #[serde(rename = "entry")]
+    Entry,
+    #[serde(rename = "goto")]
+    Goto,
+    #[serde(rename = "function breakpoint")]
+    FunctionBreakpoint,
+    #[serde(rename = "data breakpoint")]
+    DataBreakpoint,
+    #[serde(rename = "instruction breakpoint")]
+    InstructionBreakpoint,
+    #[serde(other)]
+    Unknown,
 }
