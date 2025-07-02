@@ -2,6 +2,7 @@ mod dap_messenger;
 pub mod message;
 pub mod dap_interface;
 pub mod message_types;
+pub mod requests;
 
 use crate::dap::dap_messenger::DapMessenger;
 use crate::dap::message::{InitializeArguments, ProtocolMessage, RequestMessage};
@@ -16,6 +17,8 @@ use crate::dap::message_types::Capabilities;
 pub enum DapError {
     #[error("IO Error: {0}")]
     IoError(#[from] std::io::Error),
+    #[error("DAP instance not connected")]
+    NoDapInstance,
     #[error("There is no loaded target")]
     NoLoadedTarget,
     #[error("Failed to get DAP process stdin")]
@@ -82,7 +85,7 @@ impl DapInstance {
             arguments: InitializeArguments {
                 client_id: Some("memvisor".into()),
                 client_name: Some("MemVisor".into()),
-                adapter_id: "codelldb".into(),
+                adapter_id: "lldb-dap".into(),
                 ..Default::default()
             },
         });
