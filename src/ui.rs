@@ -1,7 +1,8 @@
 use crate::dap::dap_interface::DapInterface;
 use crate::widget::SourceListing;
 use egui::panel::TopBottomSide;
-use egui::{Button, Context, Id, PopupCloseBehavior, Widget, popup_below_widget};
+use egui::{Button, Context, Id, PopupCloseBehavior, Widget, popup_below_widget, WidgetText, Ui};
+use egui_dock::{DockArea, DockState, Style, TabViewer};
 use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -25,12 +26,27 @@ impl AppTab {
     }
 }
 
+pub struct AppTabViewer;
+
+impl TabViewer for AppTabViewer {
+    type Tab = AppTab;
+
+    fn title(&mut self, tab: &mut Self::Tab) -> WidgetText {
+        tab.title().into()
+    }
+
+    fn ui(&mut self, ui: &mut Ui, tab: &mut Self::Tab) {
+        tab.widget().ui(ui);
+    }
+}
+
 const RENDER_TIME_NUM_SAMPLES: u32 = 10;
 
 pub struct MemVisorUi {
     debugging: bool,
     selected_tab: usize,
     tabs: Vec<AppTab>,
+    dock_state: DockState<AppTab>,
 
     last_render_t: Instant,
     render_time_acc: Duration,
@@ -44,6 +60,7 @@ impl MemVisorUi {
             debugging: false,
             selected_tab: 0,
             tabs: Vec::new(),
+            dock_state: DockState::new(Vec::new()),
 
             last_render_t: Instant::now(),
             render_time_acc: Duration::new(0, 0),
@@ -65,24 +82,29 @@ impl MemVisorUi {
                 }
 
                 if ui.button("Start").clicked() {
-                    let res = dap_interface.load_target("test_backends/adapter/codelldb.exe");
+                    let res = dap_interface.start_dap("lldb-dap.exe");
                     if res.is_ok() {
                         if let Err(e) = dap_interface.launch(json!({
                         "name": "launch",
                         "type": "lldb",
                         "request": "launch",
-                        "program": "C:/Users/Vanderley/Codigos_Gustavo/rose-engine-2/target/debug/game.exe",
-                        "cwd": "C:/Users/Vanderley/Codigos_Gustavo/rose-engine-2",
+                        "program": "C:/Users/gusta/CLionProjects/rose-engine/target/debug/game.exe",
+                        "cwd": "C:/Users/gusta/CLionProjects/rose-engine",
                     }).to_string()) {
                             log::error!("Error: {e}");
                         } else {
                             self.debugging = true;
                         }
+                    } else {
+                        let err = res.unwrap_err();
+                        log::error!("Start DAP error: {err}");
                     }
                 }
-                
+
                 if ui.button("Step").clicked() {
-                    dap_interface.request_next().expect("TODO remove this panic");
+                    dap_interface
+                        .request_next()
+                        .expect("TODO remove this panic");
                 }
 
                 popup_below_widget(
@@ -100,7 +122,8 @@ impl MemVisorUi {
                                 if let Ok(listing) =
                                     SourceListing::load(Arc::clone(&dap_interface), &file)
                                 {
-                                    self.tabs.push(AppTab::Source(listing));
+                                    //self.tabs.push(AppTab::Source(listing));
+                                    self.dock_state.push_to_focused_leaf(AppTab::Source(listing));
                                 }
                             }
                         }
@@ -110,18 +133,9 @@ impl MemVisorUi {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                for (i, tab) in self.tabs.iter().enumerate() {
-                    if ui.selectable_label(self.selected_tab == i, tab.title()).clicked() {
-                        self.selected_tab = i;
-                    }
-                }
-            });
-
-            let first_listing = self.tabs.get_mut(self.selected_tab);
-            if let Some(tab) = first_listing {
-                ui.add(tab.widget());
-            }
+            DockArea::new(&mut self.dock_state)
+                .style(Style::from_egui(ui.style().as_ref()))
+                .show_inside(ui, &mut AppTabViewer);
         });
 
         self.render_time_acc += self.last_render_t.elapsed();
