@@ -1,13 +1,15 @@
 use crate::dap::message::{
     DapEvent, NextArguments, ProtocolMessage, RequestMessage, ResponseMessage,
     SetBreakpointsArguments,
+    OutputEvent,
 };
 use crate::dap::message_types;
 use crate::dap::{DapError, DapInstance};
 use crate::data::breakpoints::{Breakpoint, BreakpointStore};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
-use crate::dap::message_types::SteppingGranularity;
+use crate::dap::message_types::{OutputEventCategory, SteppingGranularity};
+use crate::dap::requests::RequestId;
 
 type ProtectedOption<T> = Arc<RwLock<Option<T>>>;
 
@@ -35,7 +37,7 @@ impl DapInterface {
         }
     }
 
-    pub fn load_target(&self, filepath: impl AsRef<Path>) -> Result<(), DapError> {
+    pub fn start_dap(&self, filepath: impl AsRef<Path>) -> Result<(), DapError> {
         let instance = DapInstance::instance(filepath)?;
         let mut w_dap = self.instance.write().unwrap();
         tracy_client::Client::start().message("load_target_instance_w", 0);
@@ -64,7 +66,7 @@ impl DapInterface {
 
             if let Some(dap_interface) = &mut *instance_w {
                 while let Some(msg) = dap_interface.poll_message() {
-                    log::debug!("Received message: {msg:?}");
+                    log::trace!("Received message: {msg:?}");
                     match msg {
                         ProtocolMessage::Response(ResponseMessage::Initialize {
                             success,
@@ -78,6 +80,22 @@ impl DapInterface {
                                 }
                             } else {
                                 log::error!("Failed to initialize DAP");
+                            }
+                        }
+                        ProtocolMessage::Event(DapEvent::Output { body: OutputEvent {
+                            category: Some(category),
+                            output,
+                        } , .. }) => {
+                            match category {
+                                OutputEventCategory::Stdout => {
+                                    print!("{output}");
+                                }
+                                OutputEventCategory::Stderr => {
+                                    eprint!("{output}");
+                                }
+                                _ => {
+                                    log::info!("OutputEvent ({category:?}) says: {output}");
+                                }
                             }
                         }
                         ProtocolMessage::Event(DapEvent::Terminated { .. }) => {}
@@ -133,7 +151,6 @@ impl DapInterface {
                 .filter_map(|bp| {
                     match bp {
                         Breakpoint::Source(b) => Some(b),
-                        _ => None,
                     }
                 })
                 .map(|bp| message_types::SourceBreakpoint {
@@ -201,10 +218,35 @@ impl DapInterface {
                     stepping_granularity: Some(SteppingGranularity::Statement),
                     ..Default::default()
                 },
-            }))?;
+            }))
+        } else {
+            Err(DapError::NoDapInstance)
         }
+    }
 
-        Ok(())
+    pub fn request_variables(&self) -> Result<RequestId, DapError> {
+        let mut instance_w = self.instance.write().unwrap();
+        if let Some(instance) = instance_w.as_mut() {
+            let seq = instance.next_seq();
+
+            // If step single thread is supported, we'll use it
+            let single_thread = instance
+                .get_capabilities()
+                .supports_single_thread_execution_requests;
+
+            instance.send_message(&ProtocolMessage::Request(RequestMessage::Next {
+                seq,
+                arguments: NextArguments {
+                    single_thread,
+                    stepping_granularity: Some(SteppingGranularity::Statement),
+                    ..Default::default()
+                },
+            }))?;
+
+            Ok(RequestId::new(seq))
+        } else {
+            Err(DapError::NoDapInstance)
+        }
     }
     
     pub fn get_debug_state(&self) -> DebugState {
