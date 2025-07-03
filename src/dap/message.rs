@@ -48,15 +48,6 @@ pub enum RequestMessage {
         seq: u64,
         arguments: serde_json::Value,
     },
-    /// This launch request is sent from the client to the debug adapter to start
-    /// the debuggee with or without debugging (if noDebug is true).
-    ///
-    /// This is unspecified, depending on the debugger
-    #[serde(rename = "launch")]
-    Launch {
-        seq: u64,
-        arguments: serde_json::Value,
-    },
     /// This request indicates that the client has finished initialization of the debug adapter.
     ///
     /// So it is the last request in the sequence of configuration requests (which was
@@ -70,10 +61,23 @@ pub enum RequestMessage {
         /// Just send None for now.
         arguments: Option<serde_json::Value>,
     },
+    /// This launch request is sent from the client to the debug adapter to start
+    /// the debuggee with or without debugging (if noDebug is true).
+    ///
+    /// This is unspecified, depending on the debugger
+    #[serde(rename = "launch")]
+    Launch {
+        seq: u64,
+        arguments: serde_json::Value,
+    },
     #[serde(rename = "next")]
     Next {
         seq: u64,
         arguments: NextArguments,
+    },
+    Scopes {
+        seq: u64,
+        arguments: ScopesArguments,
     },
     /// Sets multiple breakpoints for a single source and clears all previous breakpoints in
     /// that source.
@@ -83,6 +87,10 @@ pub enum RequestMessage {
     SetBreakpoints {
         seq: u64,
         arguments: SetBreakpointsArguments,
+    },
+    Variables {
+        seq: u64,
+        arguments: VariablesArguments,
     },
     #[serde(other)]
     Unknown,
@@ -103,6 +111,20 @@ pub enum ResponseMessage {
     },
     #[serde(rename = "notStopped")]
     NotStopped,
+    #[serde(rename = "scopes")]
+    Scopes {
+        seq: u64,
+        request_req: u64,
+        success: bool,
+        body: ScopesResponseBody,
+    },
+    #[serde(rename = "variables")]
+    Variables {
+        seq: u64,
+        request_req: u64,
+        success: bool,
+        body: VariablesResponseBody,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -148,6 +170,18 @@ pub struct NextArguments {
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
+pub struct ScopesArguments {
+    /// Id of the stack frame to retrieve scope.
+    #[serde(rename = "frameId")]
+    frame_id: u64,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug)]
+pub struct ScopesResponseBody {
+    scopes: Vec<Scope>,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub struct SetBreakpointsArguments {
     /// The source location of the breakpoint. Either `path` or `source_reference` must be
     /// specified.
@@ -159,6 +193,18 @@ pub struct SetBreakpointsArguments {
     #[serde(rename = "sourceModified")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_modified: Option<bool>,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug)]
+pub struct VariablesArguments {
+    /// The variable for which to retrieve it's children
+    #[serde(rename = "variablesReference")]
+    variables_reference: u64,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug)]
+pub struct VariablesResponseBody {
+    variables: Vec<Variable>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -185,8 +231,8 @@ pub enum DapEvent {
 #[derive(Deserialize, Serialize, Debug)]
 pub struct OutputEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
-    category: Option<OutputEventCategory>,
-    output: String,
+    pub category: Option<OutputEventCategory>,
+    pub output: String,
 }
 
 #[derive(Deserialize, Serialize, Debug)]

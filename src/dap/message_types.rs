@@ -47,6 +47,65 @@ pub enum OutputEventCategory {
     Unknown,
 }
 
+#[derive(Deserialize, Serialize, Debug)]
+pub enum PresentationHint {
+    #[serde(rename = "arguments")]
+    Arguments,
+    #[serde(rename = "locals")]
+    Locals,
+    #[serde(rename = "registers")]
+    Registers,
+    #[serde(rename = "returnValue")]
+    ReturnValue,
+    #[serde(other)]
+    Unknown,
+}
+
+/// A [Scope] is a named container for variables.
+#[derive(Deserialize, Serialize, Default, Debug)]
+pub struct Scope {
+    /// Eg: 'Arguments', 'Locals' or 'Registers'. Should be shown in the UI as is.
+    name: String,
+    /// A hint of how to present this on the UI
+    #[serde(rename = "presentationHint")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    presentation_hint: Option<PresentationHint>,
+    /// A reference to be able to retrieve variables with the variables request.
+    #[serde(rename = "variablesReference")]
+    variables_reference: u64,
+    /// The number of named variables in this scope. The client can use this number for
+    /// paging.
+    #[serde(rename = "namedVariables")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    named_variables: Option<u64>,
+    /// The number of indexed variables in this scope. The client can use this number for
+    /// paging.
+    #[serde(rename = "indexedVariables")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    indexed_variables: Option<u32>,
+    /// If true, the number of variables in this scope is large or expensive to retrieve.
+    expensive: bool,
+    /// The source for this scope,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<Source>,
+    /// The start line of the range covered by this scope
+    #[serde(skip_serializing_if = "Option::is_none")]
+    line: Option<u64>,
+    /// Start position of the range covered by the scope (measured in UTF-16, depends on the
+    /// client capability config).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    column: Option<u64>,
+    /// The end line of the range covered by this scope
+    #[serde(rename = "endLine")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    end_line: Option<u64>,
+    /// End position of the range covered by the scope (measured in UTF-16, depends on the
+    /// client capability config).
+    #[serde(rename = "endColumn")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    end_column: Option<u64>,
+}
+
 /// A [Source] is a descriptor for source code
 #[derive(Deserialize, Serialize, Default, Debug)]
 pub struct Source {
@@ -84,6 +143,7 @@ pub struct Source {
     pub checksums: Option<Checksum>,
 }
 
+// TODO: Document
 #[derive(Deserialize, Serialize, Default, Debug)]
 pub struct SourceBreakpoint {
     pub line: usize,
@@ -141,6 +201,101 @@ pub enum StoppedEventReason {
     DataBreakpoint,
     #[serde(rename = "instruction breakpoint")]
     InstructionBreakpoint,
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Deserialize, Serialize, Default, Debug)]
+pub struct Variable {
+    /// The variable's name. Yay.
+    name: String,
+    /// The variables's value. This is a bit tricky. It can be multi-line, can be empty.
+    /// Is intended to be used when showing the value on the UI.
+    value: String,
+    /// The type of the variable's value. Typically shown in the UI when hovering over the value.
+    #[serde(rename = "type")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    var_type: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Default, Debug)]
+pub struct VariablePresentationHint {
+    /// The kind of the variable
+    #[serde(skip_serializing_if = "Option::is_none")]
+    kind: Option<VariablePresentationHintKind>,
+    /// Set of attributes represented as an array.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attributes: Option<Vec<VariablePresentationHintAttribute>>,
+    /// Visibility of the variable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    visibility: Option<VariablePresentationHintVisibility>,
+    /// If true, clients can present teh variable with a UI that supports a specific gesture to
+    /// trigger its evaluation. An example is a property based on a getter function, which might
+    /// be expensive or have side effects.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    lazy: Option<bool>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub enum VariablePresentationHintAttribute {
+    #[serde(rename = "static")]
+    Static,
+    #[serde(rename = "constant")]
+    Constant,
+    #[serde(rename = "readOnly")]
+    ReadOnly,
+    #[serde(rename = "rawString")]
+    RawString,
+    #[serde(rename = "hasObjectId")]
+    HasObjectId,
+    #[serde(rename = "canHaveObjectId")]
+    CanHaveObjectId,
+    #[serde(rename = "hasSideEffects")]
+    HasSideEffects,
+    #[serde(rename = "hasDataBreakpoint")]
+    HasDataBreakpoint,
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub enum VariablePresentationHintKind {
+    #[serde(rename = "property")]
+    Property,
+    #[serde(rename = "method")]
+    Method,
+    #[serde(rename = "class")]
+    Class,
+    #[serde(rename = "data")]
+    Data,
+    #[serde(rename = "event")]
+    Event,
+    #[serde(rename = "baseClass")]
+    BaseClass,
+    #[serde(rename = "innerClass")]
+    InnerClass,
+    #[serde(rename = "interface")]
+    Interface,
+    #[serde(rename = "mostDerivedClass")]
+    MostDerivedClass,
+    #[serde(rename = "virtual")]
+    Virtual,
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub enum VariablePresentationHintVisibility {
+    #[serde(rename = "public")]
+    Public,
+    #[serde(rename = "private")]
+    Private,
+    #[serde(rename = "protected")]
+    Protected,
+    #[serde(rename = "internal")]
+    Internal,
+    #[serde(rename = "final")]
+    Final,
     #[serde(other)]
     Unknown,
 }
