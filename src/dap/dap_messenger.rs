@@ -5,6 +5,7 @@ use std::sync::mpsc::SyncSender;
 
 pub struct DapMessenger<TWriter> {
     writer: TWriter,
+    trace_enabled: bool,
 }
 impl<TWriter> DapMessenger<TWriter>
 where
@@ -14,6 +15,10 @@ where
     where
         TReader: BufRead + Send + 'static,
     {
+        let trace_enabled = std::env::var("MEMVISOR_TRACE_DAP")
+            .map(|v| v != "0")
+            .unwrap_or(false);
+
         let _worker = std::thread::spawn(move || {
             let mut read_buf = String::new();
             let mut json_scratchpad = Vec::new();
@@ -21,7 +26,7 @@ where
 
             loop {
                 let res =
-                    Self::worker_receive_message(&mut reader, &mut read_buf, &mut json_scratchpad);
+                    Self::worker_receive_message(&mut reader, &mut read_buf, &mut json_scratchpad, trace_enabled);
                 if let Ok(msg) = res {
                     if let Err(e) = tx.send(msg) {
                         log::error!("Channel broken: {e}");
@@ -33,17 +38,24 @@ where
                     break; // Out of the loop
                 }
             }
-            
+
             log::info!("DAP messenger quitting");
         });
 
-        Self { writer }
+        if trace_enabled {
+            log::info!("MEMVISOR_TRACE_DAP enabled");
+        }
+        Self {
+            writer,
+            trace_enabled,
+        }
     }
 
     fn worker_receive_message<R: BufRead>(
         reader: &mut R,
         read_buf: &mut String,
         json_scratchpad: &mut Vec<u8>,
+        trace_enabled: bool,
     ) -> Result<ProtocolMessage, DapError> {
         read_buf.clear();
         reader.read_line(read_buf)?;
@@ -73,6 +85,9 @@ where
         reader.read_exact(&mut json_scratchpad[..])?;
 
         let json_str = std::str::from_utf8(&json_scratchpad[..])?;
+        if trace_enabled {
+            println!("RECEIVED: {json_str}");
+        }
 
         let message = serde_json::from_str(json_str)?;
 
@@ -84,6 +99,10 @@ where
             "Content-Length: {msg_length}\r\n\r\n{msg}",
             msg_length = msg.len()
         );
+
+        if self.trace_enabled {
+            println!("SENDING: {msg}");
+        }
 
         self.writer.write(encoded.as_bytes())?;
         self.writer.flush()?;
