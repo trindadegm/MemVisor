@@ -75,7 +75,6 @@ impl Widget for &mut SourceListing {
                     .iter()
                     .filter_map(|b| match b {
                         Breakpoint::Source(b) => Some(b),
-                        _ => None,
                     })
                     .find(|b| b.lineno == line_index + 1);
                 
@@ -92,13 +91,16 @@ impl Widget for &mut SourceListing {
                         egui::SelectableLabel::new(has_breakpoint, "O"),
                     );
                     if set_bp_res.clicked() {
-                        // TODO: Handle error
-                        let _e = if let Some(bp) = line_breakpoint {
+                        let dap_result = if let Some(bp) = line_breakpoint {
                             self.dap_interface.remove_breakpoint(&Breakpoint::Source(bp.clone()))
                         } else {
                             let path = self.source_code.path.clone();
                             self.dap_interface.put_breakpoint(Breakpoint::on_source(path, line_index + 1))
                         };
+
+                        if let Err(e) = dap_result {
+                            log::error!("{e}");
+                        }
                     } 
                     ui.label(job);
                 });
