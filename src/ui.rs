@@ -83,21 +83,18 @@ impl MemVisorUi {
 
                 if ui.button("Start").clicked() {
                     let res = dap_interface.start_dap("lldb-dap.exe");
-                    if res.is_ok() {
-                        if let Err(e) = dap_interface.launch(json!({
-                        "name": "launch",
-                        "type": "lldb",
-                        "request": "launch",
-                        "program": "C:/Users/gusta/CLionProjects/rose-engine/target/debug/game.exe",
-                        "cwd": "C:/Users/gusta/CLionProjects/rose-engine",
-                    }).to_string()) {
-                            log::error!("Error: {e}");
-                        } else {
-                            self.debugging = true;
-                        }
-                    } else {
-                        let err = res.unwrap_err();
+                    if let Err(err) = res {
                         log::error!("Start DAP error: {err}");
+                    } else if let Err(e) = dap_interface.launch(json!({
+                            "name": "launch",
+                            "type": "lldb",
+                            "request": "launch",
+                            "program": "C:/Users/gusta/CLionProjects/rose-engine/target/debug/game.exe",
+                            "cwd": "C:/Users/gusta/CLionProjects/rose-engine",
+                        }).to_string()) {
+                        log::error!("Error: {e}");
+                    } else {
+                        self.debugging = true;
                     }
                 }
 

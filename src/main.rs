@@ -169,13 +169,9 @@ impl MemVisorApp {
     fn handle_redraw(&mut self) {
         let _span = tracy_client::span!("handle_redraw");
         // Attempt to handle minimizing window
-        if let Some(window) = self.window.as_ref() {
-            if let Some(min) = window.is_minimized() {
-                if min {
-                    log::info!("Window is minimized");
-                    return;
-                }
-            }
+        if let Some(true) = self.window.as_ref().and_then(|window| window.is_minimized()) {
+            log::info!("Window is minimized");
+            return;
         }
 
         let state = self.state.as_mut().unwrap();
@@ -241,16 +237,18 @@ impl MemVisorApp {
         }
     }
 }
+impl Default for MemVisorApp {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl ApplicationHandler for MemVisorApp {
     fn new_events(&mut self, _event_loop: &ActiveEventLoop, cause: StartCause) {
-        match cause {
-            StartCause::ResumeTimeReached {..} => {
-                tracy_client::Client::start().message("Resume time reached: redraw", 0);
-                if let Some(window) = self.window.as_ref() {
-                    window.request_redraw();
-                }
+        if let StartCause::ResumeTimeReached { .. } = cause {
+            tracy_client::Client::start().message("Resume time reached: redraw", 0);
+            if let Some(window) = self.window.as_ref() {
+                window.request_redraw();
             }
-            _ => {}
         }
     }
 

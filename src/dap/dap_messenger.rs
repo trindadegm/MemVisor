@@ -104,7 +104,7 @@ where
             println!("SENDING: {msg}");
         }
 
-        self.writer.write(encoded.as_bytes())?;
+        self.writer.write_all(encoded.as_bytes())?;
         self.writer.flush()?;
 
         Ok(())

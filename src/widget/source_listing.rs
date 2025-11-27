@@ -1,5 +1,5 @@
 use crate::dap::dap_interface::DapInterface;
-use crate::data::breakpoints::{Breakpoint, CodeBreakpoint};
+use crate::data::breakpoints::Breakpoint;
 use egui::{Response, ScrollArea, Ui, Widget};
 use epaint::FontId;
 use epaint::text::LayoutJob;
@@ -73,8 +73,8 @@ impl Widget for &mut SourceListing {
                 
                 let line_breakpoint = self.list_breakpoints
                     .iter()
-                    .filter_map(|b| match b {
-                        Breakpoint::Source(b) => Some(b),
+                    .map(|b| match b {
+                        Breakpoint::Source(b) => b,
                     })
                     .find(|b| b.lineno == line_index + 1);
                 

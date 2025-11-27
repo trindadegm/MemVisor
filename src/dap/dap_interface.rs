@@ -148,9 +148,9 @@ impl DapInterface {
             };
             let breakpoints = list
                 .iter()
-                .filter_map(|bp| {
+                .map(|bp| {
                     match bp {
-                        Breakpoint::Source(b) => Some(b),
+                        Breakpoint::Source(b) => b,
                     }
                 })
                 .map(|bp| message_types::SourceBreakpoint {
@@ -193,7 +193,7 @@ impl DapInterface {
     }
 
     pub fn remove_breakpoint(&self, breakpoint: &Breakpoint) -> Result<(), DapError> {
-        self.breakpoints.remove(&breakpoint);
+        self.breakpoints.remove(breakpoint);
         match breakpoint {
             Breakpoint::Source(code_bp) => {
                 self.update_breakpoints_for_file(code_bp.file.as_ref())
@@ -253,3 +253,10 @@ impl DapInterface {
         self.debug_state.lock().unwrap().clone()
     }
 }
+impl Default for DapInterface {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+unsafe impl Sync for DapInterface {}
+unsafe impl Send for DapInterface {}
