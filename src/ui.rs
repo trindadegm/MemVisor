@@ -1,7 +1,7 @@
 use crate::dap::dap_interface::DapInterface;
 use crate::widget::SourceListing;
 use egui::panel::TopBottomSide;
-use egui::{Button, Context, Id, PopupCloseBehavior, Widget, popup_below_widget, WidgetText, Ui};
+use egui::{Align2, Button, Context, Id, Popup, PopupCloseBehavior, RectAlign, Ui, Widget, WidgetText};
 use egui_dock::{DockArea, DockState, Style, TabViewer};
 use serde_json::json;
 use std::path::PathBuf;
@@ -78,19 +78,19 @@ impl MemVisorUi {
                 let popup_id = Id::new("main-file-popup");
 
                 if file_res.clicked() {
-                    ui.memory_mut(|mem| mem.toggle_popup(popup_id));
+                    Popup::toggle_id(ctx, popup_id);
                 }
 
                 if ui.button("Start").clicked() {
-                    let res = dap_interface.start_dap("lldb-dap.exe");
+                    let res = dap_interface.start_dap("rust-gdb", ["-i", "dap"]);
                     if let Err(err) = res {
                         log::error!("Start DAP error: {err}");
                     } else if let Err(e) = dap_interface.launch(json!({
                             "name": "launch",
-                            "type": "lldb",
+                            "type": "gdb",
                             "request": "launch",
-                            "program": "C:/Users/gusta/CLionProjects/rose-engine/target/debug/game.exe",
-                            "cwd": "C:/Users/gusta/CLionProjects/rose-engine",
+                            "program": "target/debug/memvisor",
+                            "cwd": ".",
                         }).to_string()) {
                         log::error!("Error: {e}");
                     } else {
@@ -104,16 +104,17 @@ impl MemVisorUi {
                         .expect("TODO remove this panic");
                 }
 
-                popup_below_widget(
-                    ui,
-                    popup_id,
-                    &file_res,
-                    PopupCloseBehavior::CloseOnClick,
-                    |ui| {
+                Popup::menu(&file_res)
+                    .gap(4.0).align(RectAlign {
+                        parent: Align2::LEFT_BOTTOM,
+                        child: Align2::LEFT_TOP,
+                    })
+                    .close_behavior(PopupCloseBehavior::CloseOnClick)
+                    .show(|ui| {
                         ui.set_min_width(120.0);
                         if ui.add(Button::new("Open").frame(false)).clicked() {
                             let file = rfd::FileDialog::new()
-                                .set_directory(std::env::current_dir().unwrap_or(PathBuf::new()))
+                                .set_directory(std::env::current_dir().unwrap_or_default())
                                 .pick_file();
                             if let Some(file) = file {
                                 if let Ok(listing) =
@@ -124,8 +125,7 @@ impl MemVisorUi {
                                 }
                             }
                         }
-                    },
-                );
+                    });
             });
         });
 

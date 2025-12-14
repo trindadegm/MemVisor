@@ -88,7 +88,7 @@ impl Widget for &mut SourceListing {
                 ui.horizontal(|ui| {
                     let set_bp_res = ui.add_sized(
                         [self.line_height_px, self.line_height_px],
-                        egui::SelectableLabel::new(has_breakpoint, "O"),
+                        egui::Button::selectable(has_breakpoint, "O"),
                     );
                     if set_bp_res.clicked() {
                         let dap_result = if let Some(bp) = line_breakpoint {
