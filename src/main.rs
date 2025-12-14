@@ -75,8 +75,8 @@ impl MemVisorState {
                     required_features: features,
                     required_limits: Default::default(),
                     memory_hints: Default::default(),
+                    ..Default::default()
                 },
-                None,
             )
             .await
             .expect("should create device");

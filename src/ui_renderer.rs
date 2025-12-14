@@ -35,9 +35,11 @@ impl EguiRenderer {
         let egui_renderer = egui_wgpu::Renderer::new(
             device,
             output_color_format,
-            output_depth_format,
-            msaa_samples,
-            true,
+            egui_wgpu::RendererOptions {
+                depth_stencil_format: output_depth_format,
+                msaa_samples,
+                ..Default::default()
+            },
         );
 
         Self {
@@ -56,7 +58,7 @@ impl EguiRenderer {
     }
 
     pub fn begin_frame(&mut self, window: &Window) {
-        let input = self.state.take_egui_input(&window);
+        let input = self.state.take_egui_input(window);
         self.state.egui_ctx().begin_pass(input);
         self.frame_started = true;
     }
@@ -96,6 +98,7 @@ impl EguiRenderer {
                     load: wgpu::LoadOp::Load,
                     store: wgpu::StoreOp::Store,
                 },
+                depth_slice: None,
             })],
             depth_stencil_attachment: None,
             timestamp_writes: None,
