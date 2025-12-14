@@ -40,19 +40,29 @@ pub struct DapInstance {
     exec_path: PathBuf,
     #[allow(unused)]
     process: Child,
+
     last_seq: u64,
     dap_messenger: DapMessenger<ChildStdin>,
     receiver: Receiver<ProtocolMessage>,
     capabilities: Capabilities,
+
+    pending_launch_req: Option<serde_json::Value>,
 }
 
 impl DapInstance {
-    pub fn instance(path: impl AsRef<Path>) -> Result<Self, DapError> {
-        Self::_instance(path.as_ref())
+    pub fn instance<TArgs, TArgStr>(path: impl AsRef<Path>, options: TArgs) -> Result<Self, DapError>
+    where
+        TArgs: IntoIterator<Item = TArgStr>,
+        TArgStr: AsRef<str>,
+    {
+        let args: Vec<String> = options.into_iter().map(|s| s.as_ref().into()).collect();
+        Self::_instance(path.as_ref(), &args)
     }
 
-    fn _instance(path: &Path) -> Result<Self, DapError> {
+    fn _instance(path: &Path, args: &[String]) -> Result<Self, DapError> {
+        log::info!("Launching debugger {path:?} with arguments {args:?}");
         let mut process = std::process::Command::new(path)
+            .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()?;
@@ -70,6 +80,7 @@ impl DapInstance {
             dap_messenger,
             receiver: rx,
             capabilities: Capabilities::default(),
+            pending_launch_req: None,
         })
     }
 
@@ -85,7 +96,7 @@ impl DapInstance {
             arguments: InitializeArguments {
                 client_id: Some("memvisor".into()),
                 client_name: Some("MemVisor".into()),
-                adapter_id: "lldb-dap".into(),
+                adapter_id: "rust-gdb".into(),
                 ..Default::default()
             },
         });
@@ -95,17 +106,24 @@ impl DapInstance {
 
         let arguments = serde_json::from_str(backend_args_json)?;
 
-        let seq = self.next_seq();
-        let message = ProtocolMessage::Request(RequestMessage::Launch { seq, arguments });
-
-        log::debug!("Launch message: {message:?}");
-        self.send_message(&message)?;
+        self.pending_launch_req = Some(arguments);
 
         Ok(())
     }
 
     pub fn send_message(&mut self, msg: &ProtocolMessage) -> Result<(), DapError> {
         self.send_message_json(&serde_json::to_string(msg)?)
+    }
+
+    pub fn flush_pending_launch_requests(&mut self) -> Result<(), DapError> {
+        if let Some(launch_req) = self.pending_launch_req.take() {
+            let seq = self.next_seq();
+            let message = ProtocolMessage::Request(RequestMessage::Launch { seq, arguments: launch_req });
+
+            return self.send_message(&message);
+        }
+
+        Ok(())
     }
 
     pub fn poll_message(&mut self) -> Option<ProtocolMessage> {

@@ -3,7 +3,7 @@ use crate::dap::message::{
     SetBreakpointsArguments,
     OutputEvent,
 };
-use crate::dap::message_types;
+use crate::dap::{self, message_types};
 use crate::dap::{DapError, DapInstance};
 use crate::data::breakpoints::{Breakpoint, BreakpointStore};
 use std::path::{Path, PathBuf};
@@ -15,6 +15,8 @@ type ProtectedOption<T> = Arc<RwLock<Option<T>>>;
 
 #[derive(Clone, Debug)]
 pub enum DebugState {
+    NotInitialized,
+    Ready,
     Running,
     Paused,
     StoppedAtBreakpoint {
@@ -33,12 +35,16 @@ impl DapInterface {
         Self {
             instance: Default::default(),
             breakpoints: BreakpointStore::new(),
-            debug_state: Mutex::new(DebugState::Paused),
+            debug_state: Mutex::new(DebugState::NotInitialized),
         }
     }
 
-    pub fn start_dap(&self, filepath: impl AsRef<Path>) -> Result<(), DapError> {
-        let instance = DapInstance::instance(filepath)?;
+    pub fn start_dap<TArgs, TArgStr>(&self, filepath: impl AsRef<Path>, options: TArgs) -> Result<(), DapError>
+    where
+        TArgs: IntoIterator<Item = TArgStr>,
+        TArgStr: AsRef<str>,
+    {
+        let instance = DapInstance::instance(filepath, options)?;
         let mut w_dap = self.instance.write().unwrap();
         tracy_client::Client::start().message("load_target_instance_w", 0);
 
@@ -51,6 +57,9 @@ impl DapInterface {
         tracy_client::Client::start().message("launch_instance_w", 0);
         if let Some(w_dap) = &mut *w_dap {
             w_dap.launch(launch_json.as_ref())?;
+
+            let mut debug_state = self.debug_state.lock().unwrap();
+            *debug_state = DebugState::NotInitialized;
         } else {
             return Err(DapError::NoLoadedTarget);
         }
@@ -64,8 +73,8 @@ impl DapInterface {
             let mut instance_w = self.instance.write().unwrap();
             tracy_client::Client::start().message("process_dap_events_instance_w", 0);
 
-            if let Some(dap_interface) = &mut *instance_w {
-                while let Some(msg) = dap_interface.poll_message() {
+            if let Some(dap_instance) = &mut *instance_w {
+                while let Some(msg) = dap_instance.poll_message() {
                     log::trace!("Received message: {msg:?}");
                     match msg {
                         ProtocolMessage::Response(ResponseMessage::Initialize {
@@ -76,8 +85,11 @@ impl DapInterface {
                             if success {
                                 configuration_done = true;
                                 if let Some(cap) = &body {
-                                    dap_interface.set_capabilities(*cap);
+                                    dap_instance.set_capabilities(*cap);
                                 }
+
+                                let mut debug_state = self.debug_state.lock().unwrap();
+                                *debug_state = DebugState::Ready;
                             } else {
                                 log::error!("Failed to initialize DAP");
                             }
@@ -105,17 +117,23 @@ impl DapInterface {
             }
         }
 
+
         if configuration_done {
             self.update_all_breakpoints()?;
 
             {
                 let mut instance_w = self.instance.write().unwrap();
                 if let Some(dap_interface) = instance_w.as_mut() {
+                    if let Err(e) = dap_interface.flush_pending_launch_requests() {
+                        log::error!("Error while flushing pending launch request: {e}");
+                    }
+
                     let seq = dap_interface.next_seq();
+
                     dap_interface.send_message(&ProtocolMessage::Request(
                         RequestMessage::ConfigurationDone {
                             seq,
-                            arguments: None,
+                            arguments: Some(serde_json::json!({})),
                         },
                     ))?;
                 }
