@@ -3,6 +3,8 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
+use crate::dap::message_types::Breakpoint as DapBreakpoint;
+
 #[derive(Clone, Debug)]
 pub enum Breakpoint {
     Source(CodeBreakpoint)
@@ -13,6 +15,7 @@ impl Breakpoint {
         Self::Source(CodeBreakpoint {
             file: Arc::new(file.into()),
             lineno,
+            breakpoint_id: 0,
         })
     }
 }
@@ -22,6 +25,7 @@ pub struct CodeBreakpoint {
     // The Arc is so that we can clone this crap. It should never change anyway
     pub file: Arc<PathBuf>,
     pub lineno: usize,
+    pub breakpoint_id: usize,
 }
 
 /// For each line of the file (usize), we can have a breakpoint
@@ -31,16 +35,20 @@ type ProtectedFileBreakpoints = RwLock<FileBreakpoints>;
 /// A project has breakpoints of several files
 type ProjectBreakpoints = HashMap<PathBuf, ProtectedFileBreakpoints>;
 
+type DapBreakpointTable = HashMap<usize, DapBreakpoint>;
+
 #[derive(Default)]
 pub struct BreakpointStore {
     /// And all the breakpoints are also protected
     points: RwLock<ProjectBreakpoints>,
+    data: RwLock<DapBreakpointTable>,
 }
 
 impl BreakpointStore {
     pub fn new() -> Self {
         Self {
             points: RwLock::new(HashMap::default()),
+            data: RwLock::new(HashMap::default()),
         }
     }
 
@@ -110,5 +118,44 @@ impl BreakpointStore {
         for path in project_breakpoints.keys() {
             out.push(path.clone());
         }
+    }
+
+    pub fn add_breakpoint_data(&self, data: DapBreakpoint) -> Option<usize> {
+        let id = data.id?;
+        let source = data.source.as_ref()?.path.as_ref()?;
+        let line = data.line?;
+
+        {
+            let points_r = self.points.read().unwrap();
+            let mut source_points_w = points_r.get(Path::new(source))?.write().unwrap();
+            let source_breakpoint = source_points_w.get_mut(&line)?;
+            source_breakpoint.breakpoint_id = id;
+        }
+
+        let mut data_w = self.data.write().unwrap();
+        data_w.insert(id, data);
+
+        Some(id)
+    }
+
+    pub fn update_breakpoint_data(&self, data: DapBreakpoint) -> Option<usize> {
+        let id = data.id?;
+
+        let mut data_w = self.data.write().unwrap();
+        data_w.insert(id, data);
+
+        Some(id)
+    }
+
+    pub fn get_breakpoint_data(&self, id: usize) -> Option<DapBreakpoint> {
+        let data_r = self.data.read().unwrap();
+
+        data_r.get(&id).cloned()
+    }
+
+    pub fn delete_breakpoint_data(&self, id: usize) -> Option<DapBreakpoint> {
+        let mut data_w = self.data.write().unwrap();
+
+        data_w.remove(&id)
     }
 }

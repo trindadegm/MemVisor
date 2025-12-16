@@ -1,9 +1,7 @@
 use crate::dap::message::{
-    DapEvent, NextArguments, ProtocolMessage, RequestMessage, ResponseMessage,
-    SetBreakpointsArguments,
-    OutputEvent,
+    BreakpointEventReason, DapEvent, NextArguments, OutputEvent, BreakpointEvent, ProtocolMessage, RequestMessage, ResponseMessage, SetBreakpointsArguments
 };
-use crate::dap::{self, message_types};
+use crate::dap::message_types;
 use crate::dap::{DapError, DapInstance};
 use crate::data::breakpoints::{Breakpoint, BreakpointStore};
 use std::path::{Path, PathBuf};
@@ -94,6 +92,16 @@ impl DapInterface {
                                 log::error!("Failed to initialize DAP");
                             }
                         }
+                        ProtocolMessage::Response(ResponseMessage::SetBreakpoints { success, body, .. }) => {
+                            if success {
+                                for breakpoint in body.breakpoints.iter().cloned() {
+                                    log::debug!("Confirming addition of breakpoint {breakpoint:?}");
+                                    self.breakpoints.add_breakpoint_data(breakpoint);
+                                }
+                            } else {
+                                log::error!("Failed to set breakpoints to DAP")
+                            }
+                        }
                         ProtocolMessage::Event(DapEvent::Output { body: OutputEvent {
                             category: Some(category),
                             output,
@@ -109,6 +117,18 @@ impl DapInterface {
                                     log::info!("OutputEvent ({category:?}) says: {output}");
                                 }
                             }
+                        }
+                        ProtocolMessage::Event(DapEvent::Breakpoint { body: BreakpointEvent { reason: BreakpointEventReason::New, breakpoint }, .. }) => {
+                            log::debug!("Confirming addition of breakpoint {breakpoint:?}");
+                            self.breakpoints.add_breakpoint_data(breakpoint);
+                        }
+                        ProtocolMessage::Event(DapEvent::Breakpoint { body: BreakpointEvent { reason: BreakpointEventReason::Changed, breakpoint }, .. }) => {
+                            log::debug!("Breakpoint updated {breakpoint:?}");
+                            self.breakpoints.update_breakpoint_data(breakpoint);
+                        }
+                        ProtocolMessage::Event(DapEvent::Breakpoint { body: BreakpointEvent { reason: BreakpointEventReason::Removed, breakpoint: message_types::Breakpoint { id: Some(id), .. }  }, .. }) => {
+                            log::debug!("Breakpoint of id {id} removed");
+                            self.breakpoints.delete_breakpoint_data(id);
                         }
                         ProtocolMessage::Event(DapEvent::Terminated { .. }) => {}
                         _ => {}

@@ -1,5 +1,61 @@
 use serde::{Deserialize, Serialize};
 
+use crate::data::types::DebugPointer;
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct Breakpoint {
+    pub id: Option<usize>,
+    /// If true, then the breakpoint was set, otherwise it is pending, and may or may not be set by
+    /// the debugger later. In which case, the debugger might send an update message setting
+    /// verified to true.
+    pub verified: bool,
+    /// This is information about the breakpoint that may be shown to the user. Might explain why a
+    /// breakpoint could not be set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    /// Source code file where the breakpoint was set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<Source>,
+    /// Line in the source code where the breakpoint was set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<usize>,
+    /// Start position of the source range covered by the breakpoint.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub column: Option<usize>,
+    /// End of the line of the actual range covered by the breakpoint.
+    #[serde(rename = "endLine")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end_line: Option<usize>,
+    /// End of position of the source range covered by the breakpoint.
+    #[serde(rename = "endColumn")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end_column: Option<usize>,
+    /// A memory reference to where the breakpoint is set.
+    #[serde(rename = "instructionReference")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub instruction_reference: Option<DebugPointer>,
+    /// The offset from the instruction reference. Can be negative.
+    #[serde(rename = "offset")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offset: Option<isize>,
+    /// An explanation of why a breakpoint could not be verified.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<BreakpointUnverifiedReason>,
+}
+
+/// An explanation of why a breakpoint could not be verified.
+#[derive(Clone, Copy, Deserialize, Serialize, Debug)]
+pub enum BreakpointUnverifiedReason {
+    /// The breakpoint might be verified in the future, but the adapter cannot verify it in the
+    /// current state.
+    #[serde(rename = "pending")]
+    Pending,
+    /// The breakpoint was not able to be verified, and the adapter does not believe it can be
+    /// verified without intervention.
+    #[serde(rename = "failed")]
+    Failed,
+}
+
 // We'll do it little by little
 /// Set of DAP capabilities. Not all are defined here. Too many
 #[derive(Clone, Copy, Deserialize, Serialize, Default, Debug)]
@@ -13,13 +69,13 @@ pub struct Capabilities {
     pub supports_single_thread_execution_requests: Option<bool>,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Checksum {
     pub algorithm: ChecksumAlgorithm,
     pub checksum: String,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Copy, Clone, Debug)]
 pub enum ChecksumAlgorithm {
     #[serde(rename = "MD5")]
     Md5,
@@ -31,7 +87,7 @@ pub enum ChecksumAlgorithm {
     Timestamp,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Copy, Clone, Debug)]
 pub enum OutputEventCategory {
     #[serde(rename = "console")]
     Console,
@@ -47,7 +103,7 @@ pub enum OutputEventCategory {
     Unknown,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Copy, Clone, Debug)]
 pub enum PresentationHint {
     #[serde(rename = "arguments")]
     Arguments,
@@ -62,7 +118,7 @@ pub enum PresentationHint {
 }
 
 /// A [Scope] is a named container for variables.
-#[derive(Deserialize, Serialize, Default, Debug)]
+#[derive(Deserialize, Serialize, Default, Clone, Debug)]
 pub struct Scope {
     /// Eg: 'Arguments', 'Locals' or 'Registers'. Should be shown in the UI as is.
     name: String,
@@ -107,7 +163,7 @@ pub struct Scope {
 }
 
 /// A [Source] is a descriptor for source code
-#[derive(Deserialize, Serialize, Default, Debug)]
+#[derive(Deserialize, Serialize, Default, Clone, Debug)]
 pub struct Source {
     /// Short name of the source
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -144,7 +200,7 @@ pub struct Source {
 }
 
 // TODO: Document
-#[derive(Deserialize, Serialize, Default, Debug)]
+#[derive(Deserialize, Serialize, Default, Clone, Debug)]
 pub struct SourceBreakpoint {
     pub line: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -161,7 +217,7 @@ pub struct SourceBreakpoint {
     pub mode: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
 pub enum SourcePresentationHint {
     #[serde(rename = "normal")]
     Normal,
@@ -171,7 +227,7 @@ pub enum SourcePresentationHint {
     Deemphasize,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
 pub enum SteppingGranularity {
     #[serde(rename = "statement")]
     Statement,
@@ -181,7 +237,7 @@ pub enum SteppingGranularity {
     Instruction,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
 pub enum StoppedEventReason {
     #[serde(rename = "step")]
     Step,
@@ -205,7 +261,7 @@ pub enum StoppedEventReason {
     Unknown,
 }
 
-#[derive(Deserialize, Serialize, Default, Debug)]
+#[derive(Deserialize, Serialize, Default, Clone, Debug)]
 pub struct Variable {
     /// The variable's name. Yay.
     name: String,
@@ -218,7 +274,7 @@ pub struct Variable {
     var_type: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Default, Debug)]
+#[derive(Deserialize, Serialize, Default, Clone, Debug)]
 pub struct VariablePresentationHint {
     /// The kind of the variable
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -236,7 +292,7 @@ pub struct VariablePresentationHint {
     lazy: Option<bool>,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
 pub enum VariablePresentationHintAttribute {
     #[serde(rename = "static")]
     Static,
@@ -258,7 +314,7 @@ pub enum VariablePresentationHintAttribute {
     Unknown,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
 pub enum VariablePresentationHintKind {
     #[serde(rename = "property")]
     Property,
@@ -284,7 +340,7 @@ pub enum VariablePresentationHintKind {
     Unknown,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Clone, Copy, Debug)]
 pub enum VariablePresentationHintVisibility {
     #[serde(rename = "public")]
     Public,

@@ -125,6 +125,13 @@ pub enum ResponseMessage {
         success: bool,
         body: VariablesResponseBody,
     },
+    #[serde(rename="setBreakpoints")]
+    SetBreakpoints {
+        seq: u64,
+        request_seq: u64,
+        success: bool,
+        body: SetBreakpointsResponseBody,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -173,12 +180,12 @@ pub struct NextArguments {
 pub struct ScopesArguments {
     /// Id of the stack frame to retrieve scope.
     #[serde(rename = "frameId")]
-    frame_id: u64,
+    pub frame_id: u64,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub struct ScopesResponseBody {
-    scopes: Vec<Scope>,
+    pub scopes: Vec<Scope>,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
@@ -196,20 +203,30 @@ pub struct SetBreakpointsArguments {
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
+pub struct SetBreakpointsResponseBody {
+    pub breakpoints: Vec<Breakpoint>,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub struct VariablesArguments {
     /// The variable for which to retrieve it's children
     #[serde(rename = "variablesReference")]
-    variables_reference: u64,
+    pub variables_reference: u64,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub struct VariablesResponseBody {
-    variables: Vec<Variable>,
+    pub variables: Vec<Variable>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "event")]
 pub enum DapEvent {
+    #[serde(rename = "breakpoint")]
+    Breakpoint {
+        seq: u64,
+        body: BreakpointEvent,
+    },
     #[serde(rename = "output")]
     Output {
         seq: u64,
@@ -229,6 +246,24 @@ pub enum DapEvent {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
+pub struct BreakpointEvent {
+    pub reason: BreakpointEventReason,
+    pub breakpoint: Breakpoint,
+}
+
+#[derive(Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum BreakpointEventReason {
+    #[serde(rename = "changed")]
+    Changed,
+    #[serde(rename = "new")]
+    New,
+    #[serde(rename = "removed")]
+    Removed,
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
 pub struct OutputEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub category: Option<OutputEventCategory>,
@@ -238,31 +273,31 @@ pub struct OutputEvent {
 #[derive(Deserialize, Serialize, Debug)]
 pub struct StoppedEvent {
     /// The reason for the stoppage
-    reason: StoppedEventReason,
+    pub reason: StoppedEventReason,
     /// A description of the stoppage
     #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<String>,
+    pub description: Option<String>,
     /// The thread which was stopped
     #[serde(rename = "threadId")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    thread_id: Option<u64>,
+    pub thread_id: Option<u64>,
     /// Hint that the client should not change focus
     #[serde(rename = "preserveFocusHint")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    preserve_focus_hint: Option<bool>,
+    pub preserve_focus_hint: Option<bool>,
     /// Additional information. Ex: If the reason is exception, contains the exception name,
     /// to show it on the UI.
     #[serde(rename = "text")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    text: Option<String>,
+    pub text: Option<String>,
     /// If true, then all threads have been stopped
     #[serde(rename = "allThreadsStopped")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    all_threads_stopped: Option<bool>,
+    pub all_threads_stopped: Option<bool>,
     /// A list of the breakpoints that triggered the event
     #[serde(rename = "hitBreakpointIds")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    hit_breakpoint_ids: Option<Vec<u64>>,
+    pub hit_breakpoint_ids: Option<Vec<u64>>,
 }
 
 #[cfg(test)]
