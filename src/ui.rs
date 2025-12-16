@@ -4,7 +4,6 @@ use egui::panel::TopBottomSide;
 use egui::{Align2, Button, Context, Id, Popup, PopupCloseBehavior, RectAlign, Ui, Widget, WidgetText};
 use egui_dock::{DockArea, DockState, Style, TabViewer};
 use serde_json::json;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
