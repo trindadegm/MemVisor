@@ -1,5 +1,5 @@
-use egui_wgpu::{wgpu, ScreenDescriptor};
 use egui_wgpu::wgpu::{TextureFormat, TextureView};
+use egui_wgpu::{ScreenDescriptor, wgpu};
 use winit::event::WindowEvent;
 use winit::window::Window;
 
@@ -7,6 +7,15 @@ pub struct EguiRenderer {
     state: egui_winit::State,
     renderer: egui_wgpu::Renderer,
     frame_started: bool,
+}
+
+pub struct RendererResources<'a> {
+    pub device: &'a wgpu::Device,
+    pub queue: &'a wgpu::Queue,
+    pub encoder: &'a mut wgpu::CommandEncoder,
+    pub window: &'a Window,
+    pub window_surface_view: &'a TextureView,
+    pub screen_descriptor: ScreenDescriptor,
 }
 
 impl EguiRenderer {
@@ -57,38 +66,58 @@ impl EguiRenderer {
         self.context().set_pixels_per_point(v);
     }
 
-    pub fn begin_frame(&mut self, window: &Window) {
+    pub fn begin_ui_frame(
+        &mut self,
+        window: &Window,
+        mut ui_fn: impl FnMut(&egui::Context, &mut egui::Ui),
+    ) -> egui::FullOutput {
         let input = self.state.take_egui_input(window);
-        self.state.egui_ctx().begin_pass(input);
+        let ctx = self.state.egui_ctx();
+        let full_output = ctx.run_ui(input, |ui| ui_fn(ctx, ui));
+
         self.frame_started = true;
+
+        full_output
     }
+
+    // pub fn begin_frame(&mut self, window: &Window) {
+    //     let input = self.state.take_egui_input(window);
+    //     self.state.egui_ctx().begin_pass(input);
+    //     self.frame_started = true;
+    // }
 
     pub fn draw_frame(
         &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        encoder: &mut wgpu::CommandEncoder,
-        window: &Window,
-        window_surface_view: &TextureView,
-        screen_descriptor: ScreenDescriptor,
+        RendererResources {
+            device,
+            queue,
+            encoder,
+            window,
+            window_surface_view,
+            screen_descriptor,
+        }: RendererResources,
+        ui_output: egui::FullOutput,
     ) {
         let _span = tracy_client::span!("egui_draw_frame");
-        assert!(self.frame_started, "frame must be started before being drawn");
+        assert!(
+            self.frame_started,
+            "frame must be started before being drawn"
+        );
 
         self.set_pixels_per_point(screen_descriptor.pixels_per_point);
 
-        let full_output = self.state.egui_ctx().end_pass();
-
-        self.state.handle_platform_output(window, full_output.platform_output);
+        self.state
+            .handle_platform_output(window, ui_output.platform_output);
 
         let tris = self
             .state
             .egui_ctx()
-            .tessellate(full_output.shapes, self.state.egui_ctx().pixels_per_point());
-        for (id, img_delta) in &full_output.textures_delta.set {
+            .tessellate(ui_output.shapes, self.state.egui_ctx().pixels_per_point());
+        for (id, img_delta) in &ui_output.textures_delta.set {
             self.renderer.update_texture(device, queue, *id, img_delta);
         }
-        self.renderer.update_buffers(device, queue, encoder, &tris, &screen_descriptor);
+        self.renderer
+            .update_buffers(device, queue, encoder, &tris, &screen_descriptor);
 
         let rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -104,10 +133,12 @@ impl EguiRenderer {
             timestamp_writes: None,
             label: Some("egui_draw_frame_render_pass"),
             occlusion_query_set: None,
+            multiview_mask: None,
         });
 
-        self.renderer.render(&mut rpass.forget_lifetime(), &tris, &screen_descriptor);
-        for x in &full_output.textures_delta.free {
+        self.renderer
+            .render(&mut rpass.forget_lifetime(), &tris, &screen_descriptor);
+        for x in &ui_output.textures_delta.free {
             self.renderer.free_texture(x);
         }
 

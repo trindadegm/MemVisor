@@ -1,6 +1,6 @@
 use crate::dap::dap_interface::DapInterface;
 use crate::ui::MemVisorUi;
-use crate::ui_renderer::EguiRenderer;
+use crate::ui_renderer::{EguiRenderer, RendererResources};
 use egui_wgpu::wgpu;
 use std::sync::Arc;
 use std::time::Duration;
@@ -69,15 +69,13 @@ impl MemVisorState {
 
         let features = wgpu::Features::empty();
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: None,
-                    required_features: features,
-                    required_limits: Default::default(),
-                    memory_hints: Default::default(),
-                    ..Default::default()
-                },
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                label: None,
+                required_features: features,
+                required_limits: Default::default(),
+                memory_hints: Default::default(),
+                ..Default::default()
+            })
             .await
             .expect("should create device");
 
@@ -122,11 +120,15 @@ impl MemVisorState {
         self.surface_config.height = height;
         self.surface.configure(&self.device, &self.surface_config);
     }
+
+    fn reconfigure_surface(&mut self) {
+        self.surface.configure(&self.device, &self.surface_config);
+    }
 }
 
 impl MemVisorApp {
     pub fn new() -> Self {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         Self {
             instance,
             ui: MemVisorUi::new(),
@@ -169,7 +171,11 @@ impl MemVisorApp {
     fn handle_redraw(&mut self) {
         let _span = tracy_client::span!("handle_redraw");
         // Attempt to handle minimizing window
-        if let Some(true) = self.window.as_ref().and_then(|window| window.is_minimized()) {
+        if let Some(true) = self
+            .window
+            .as_ref()
+            .and_then(|window| window.is_minimized())
+        {
             log::info!("Window is minimized");
             return;
         }
@@ -184,20 +190,24 @@ impl MemVisorApp {
 
         let surface_texture = state.surface.get_current_texture();
 
-        match surface_texture {
-            Err(wgpu::SurfaceError::Outdated) => {
-                // Ignoring outdated to allow resizing and minimization
+        let surface_texture = match surface_texture {
+            wgpu::CurrentSurfaceTexture::Success(texture) => texture,
+            wgpu::CurrentSurfaceTexture::Suboptimal(_) | wgpu::CurrentSurfaceTexture::Outdated => {
+                // Ignoring outdated to allow resizing or other variances
                 log::error!("wgpu surface outdated");
+                state.reconfigure_surface();
                 return;
             }
-            Err(_) => {
-                surface_texture.expect("should be able to acquire next swapchain image");
+            wgpu::CurrentSurfaceTexture::Occluded | wgpu::CurrentSurfaceTexture::Timeout => {
+                // Ignoring occluded to allow minimization and ignore timeouts because we need to
+                // wait more
+                log::warn!("wgpu surface occluded");
                 return;
             }
-            Ok(_) => {}
+            _ => {
+                panic!("should be able to acquire next swapchain image");
+            }
         };
-
-        let surface_texture = surface_texture.unwrap();
 
         let surface_view = surface_texture
             .texture
@@ -211,20 +221,21 @@ impl MemVisorApp {
 
         {
             let _egui_frame = tracy_client::span!("egui_redraw");
-            state.egui_renderer.begin_frame(window);
 
-            self.ui.update(
-                state.egui_renderer.context(),
-                Arc::clone(&state.dap_interface),
-            );
+            let full_output = state.egui_renderer.begin_ui_frame(window, |ctx, ui| {
+                self.ui.update(ctx, ui, Arc::clone(&state.dap_interface));
+            });
 
             state.egui_renderer.draw_frame(
-                &state.device,
-                &state.queue,
-                &mut encoder,
-                window,
-                &surface_view,
-                screen_descriptor,
+                RendererResources {
+                    device: &state.device,
+                    queue: &state.queue,
+                    encoder: &mut encoder,
+                    window_surface_view: &surface_view,
+                    window,
+                    screen_descriptor,
+                },
+                full_output,
             );
         }
 
@@ -285,7 +296,7 @@ impl ApplicationHandler for MemVisorApp {
             WindowEvent::RedrawRequested => {
                 tracy_client::Client::start().message("Redraw Requested", 0);
                 self.handle_redraw();
-                
+
                 let window = self.window.as_ref().expect("must have window here");
                 let state = self.state.as_ref().expect("should have memvisor state");
                 if state.egui_renderer.context().has_requested_repaint() {

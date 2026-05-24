@@ -65,21 +65,23 @@ impl Widget for &mut SourceListing {
 
         ScrollArea::both().show_rows(ui, self.line_height_px, self.lines.len(), |ui, range| {
             ui.set_width(ui.available_width());
-            
+
             let lines_in_range = &self.lines[range.clone()];
-            
+
             for (i, line) in lines_in_range.iter().enumerate() {
                 let line_index = i + range.start;
-                
-                let line_breakpoint = self.list_breakpoints
+                let lineno = line_index + 1;
+
+                let line_breakpoint = self
+                    .list_breakpoints
                     .iter()
                     .map(|b| match b {
                         Breakpoint::Source(b) => b,
                     })
-                    .find(|b| b.lineno == line_index + 1);
-                
+                    .find(|b| b.lineno == lineno);
+
                 let has_breakpoint = line_breakpoint.is_some();
-                
+
                 let job = LayoutJob::simple_singleline(
                     line.clone(),
                     FontId::monospace(self.line_height_px),
@@ -92,16 +94,24 @@ impl Widget for &mut SourceListing {
                     );
                     if set_bp_res.clicked() {
                         let dap_result = if let Some(bp) = line_breakpoint {
-                            self.dap_interface.remove_breakpoint(&Breakpoint::Source(bp.clone()))
+                            self.dap_interface
+                                .remove_breakpoint(&Breakpoint::Source(bp.clone()))
                         } else {
                             let path = self.source_code.path.clone();
-                            self.dap_interface.put_breakpoint(Breakpoint::on_source(path, line_index + 1))
+                            self.dap_interface
+                                .put_breakpoint(Breakpoint::on_source(path, line_index + 1))
                         };
 
                         if let Err(e) = dap_result {
                             log::error!("{e}");
                         }
-                    } 
+                    }
+                    ui.horizontal(|ui| {
+                        ui.set_width(30.0);
+                        ui.with_layout(egui::Layout::right_to_left(Default::default()), |ui| {
+                            ui.label(lineno.to_string());
+                        });
+                    });
                     ui.label(job);
                 });
             }

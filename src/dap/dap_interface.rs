@@ -1,13 +1,14 @@
 use crate::dap::message::{
-    BreakpointEventReason, DapEvent, NextArguments, OutputEvent, BreakpointEvent, ProtocolMessage, RequestMessage, ResponseMessage, SetBreakpointsArguments
+    BreakpointEvent, BreakpointEventReason, DapEvent, NextArguments, OutputEvent, ProtocolMessage,
+    RequestMessage, ResponseMessage, SetBreakpointsArguments, StackTraceArguments,
 };
-use crate::dap::message_types;
+use crate::dap::message_types::{self, StoppedEventReason};
+use crate::dap::message_types::{OutputEventCategory, SteppingGranularity};
+use crate::dap::requests::RequestId;
 use crate::dap::{DapError, DapInstance};
 use crate::data::breakpoints::{Breakpoint, BreakpointStore};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
-use crate::dap::message_types::{OutputEventCategory, SteppingGranularity};
-use crate::dap::requests::RequestId;
 
 type ProtectedOption<T> = Arc<RwLock<Option<T>>>;
 
@@ -17,9 +18,8 @@ pub enum DebugState {
     Ready,
     Running,
     Paused,
-    StoppedAtBreakpoint {
-        breakpoint: Breakpoint,
-    }
+    StoppedAtBreakpoint { breakpoint: Breakpoint },
+    StoppedSomewhere,
 }
 
 pub struct DapInterface {
@@ -37,7 +37,11 @@ impl DapInterface {
         }
     }
 
-    pub fn start_dap<TArgs, TArgStr>(&self, filepath: impl AsRef<Path>, options: TArgs) -> Result<(), DapError>
+    pub fn start_dap<TArgs, TArgStr>(
+        &self,
+        filepath: impl AsRef<Path>,
+        options: TArgs,
+    ) -> Result<(), DapError>
     where
         TArgs: IntoIterator<Item = TArgStr>,
         TArgStr: AsRef<str>,
@@ -92,7 +96,11 @@ impl DapInterface {
                                 log::error!("Failed to initialize DAP");
                             }
                         }
-                        ProtocolMessage::Response(ResponseMessage::SetBreakpoints { success, body, .. }) => {
+                        ProtocolMessage::Response(ResponseMessage::SetBreakpoints {
+                            success,
+                            body,
+                            ..
+                        }) => {
                             if success {
                                 for breakpoint in body.breakpoints.iter().cloned() {
                                     log::debug!("Confirming addition of breakpoint {breakpoint:?}");
@@ -102,33 +110,101 @@ impl DapInterface {
                                 log::error!("Failed to set breakpoints to DAP")
                             }
                         }
-                        ProtocolMessage::Event(DapEvent::Output { body: OutputEvent {
-                            category: Some(category),
-                            output,
-                        } , .. }) => {
-                            match category {
-                                OutputEventCategory::Stdout => {
-                                    print!("{output}");
-                                }
-                                OutputEventCategory::Stderr => {
-                                    eprint!("{output}");
-                                }
-                                _ => {
-                                    log::info!("OutputEvent ({category:?}) says: {output}");
-                                }
+                        ProtocolMessage::Response(ResponseMessage::StackTrace {
+                            success,
+                            body,
+                            ..
+                        }) => {
+                            if success {
+                                for frame in body.stack_frames.iter() {}
+                            } else {
+                                log::error!("Failed to query stack frames from DAP");
                             }
                         }
-                        ProtocolMessage::Event(DapEvent::Breakpoint { body: BreakpointEvent { reason: BreakpointEventReason::New, breakpoint }, .. }) => {
+                        ProtocolMessage::Event(DapEvent::Output {
+                            body:
+                                OutputEvent {
+                                    category: Some(category),
+                                    output,
+                                },
+                            ..
+                        }) => match category {
+                            OutputEventCategory::Stdout => {
+                                print!("{output}");
+                            }
+                            OutputEventCategory::Stderr => {
+                                eprint!("{output}");
+                            }
+                            _ => {
+                                log::info!("OutputEvent ({category:?}) says: {output}");
+                            }
+                        },
+                        ProtocolMessage::Event(DapEvent::Breakpoint {
+                            body:
+                                BreakpointEvent {
+                                    reason: BreakpointEventReason::New,
+                                    breakpoint,
+                                },
+                            ..
+                        }) => {
                             log::debug!("Confirming addition of breakpoint {breakpoint:?}");
                             self.breakpoints.add_breakpoint_data(breakpoint);
                         }
-                        ProtocolMessage::Event(DapEvent::Breakpoint { body: BreakpointEvent { reason: BreakpointEventReason::Changed, breakpoint }, .. }) => {
+                        ProtocolMessage::Event(DapEvent::Breakpoint {
+                            body:
+                                BreakpointEvent {
+                                    reason: BreakpointEventReason::Changed,
+                                    breakpoint,
+                                },
+                            ..
+                        }) => {
                             log::debug!("Breakpoint updated {breakpoint:?}");
                             self.breakpoints.update_breakpoint_data(breakpoint);
                         }
-                        ProtocolMessage::Event(DapEvent::Breakpoint { body: BreakpointEvent { reason: BreakpointEventReason::Removed, breakpoint: message_types::Breakpoint { id: Some(id), .. }  }, .. }) => {
+                        ProtocolMessage::Event(DapEvent::Breakpoint {
+                            body:
+                                BreakpointEvent {
+                                    reason: BreakpointEventReason::Removed,
+                                    breakpoint: message_types::Breakpoint { id: Some(id), .. },
+                                },
+                            ..
+                        }) => {
                             log::debug!("Breakpoint of id {id} removed");
                             self.breakpoints.delete_breakpoint_data(id);
+                        }
+                        ProtocolMessage::Event(DapEvent::Stopped { body, .. }) => {
+                            match body.reason {
+                                // StoppedEventReason::Breakpoint | StoppedEventReason::FunctionBreakpoint => {
+                                //     let hit_breakpoint = body.hit_breakpoint_ids.and_then(|list| list.first().copied());
+                                //     let breakpoint = hit_breakpoint.and_then(|b| self.breakpoints.get_breakpoint_for_dap_id(b));
+                                //
+                                //     if let Some(breakpoint) = breakpoint {
+                                //         let mut debug_state = self.debug_state.lock().unwrap();
+                                //         *debug_state = DebugState::StoppedAtBreakpoint { breakpoint };
+                                //     }
+                                // }
+                                _ if body.thread_id.is_some() => {
+                                    let msg =
+                                        ProtocolMessage::Request(RequestMessage::StackTrace {
+                                            seq: dap_instance.next_seq(),
+                                            arguments: StackTraceArguments {
+                                                thread_id: body.thread_id.unwrap(),
+                                                // start_frame: Some(0),
+                                                // TODO: this should be configured somewhere by the
+                                                // user
+                                                levels: Some(2),
+                                                ..Default::default()
+                                            },
+                                        });
+                                    dap_instance.send_message(&msg)?;
+
+                                    let mut debug_state = self.debug_state.lock().unwrap();
+                                    *debug_state = DebugState::StoppedSomewhere;
+                                }
+                                _ => {
+                                    log::info!("Stopped at some unknown thread");
+                                }
+                            }
                         }
                         ProtocolMessage::Event(DapEvent::Terminated { .. }) => {}
                         _ => {}
@@ -136,7 +212,6 @@ impl DapInterface {
                 }
             }
         }
-
 
         if configuration_done {
             self.update_all_breakpoints()?;
@@ -186,10 +261,8 @@ impl DapInterface {
             };
             let breakpoints = list
                 .iter()
-                .map(|bp| {
-                    match bp {
-                        Breakpoint::Source(b) => b,
-                    }
+                .map(|bp| match bp {
+                    Breakpoint::Source(b) => b,
                 })
                 .map(|bp| message_types::SourceBreakpoint {
                     line: bp.lineno,
@@ -224,18 +297,14 @@ impl DapInterface {
     pub fn put_breakpoint(&self, breakpoint: Breakpoint) -> Result<(), DapError> {
         self.breakpoints.add(breakpoint.clone());
         match breakpoint {
-            Breakpoint::Source(code_bp) => {
-                self.update_breakpoints_for_file(code_bp.file.as_ref())
-            }
+            Breakpoint::Source(code_bp) => self.update_breakpoints_for_file(code_bp.file.as_ref()),
         }
     }
 
     pub fn remove_breakpoint(&self, breakpoint: &Breakpoint) -> Result<(), DapError> {
         self.breakpoints.remove(breakpoint);
         match breakpoint {
-            Breakpoint::Source(code_bp) => {
-                self.update_breakpoints_for_file(code_bp.file.as_ref())
-            }
+            Breakpoint::Source(code_bp) => self.update_breakpoints_for_file(code_bp.file.as_ref()),
         }
     }
 
@@ -253,7 +322,7 @@ impl DapInterface {
                 seq,
                 arguments: NextArguments {
                     single_thread,
-                    stepping_granularity: Some(SteppingGranularity::Statement),
+                    stepping_granularity: Some(SteppingGranularity::Line),
                     ..Default::default()
                 },
             }))
@@ -286,7 +355,7 @@ impl DapInterface {
             Err(DapError::NoDapInstance)
         }
     }
-    
+
     pub fn get_debug_state(&self) -> DebugState {
         self.debug_state.lock().unwrap().clone()
     }

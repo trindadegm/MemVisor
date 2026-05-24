@@ -1,7 +1,8 @@
 use crate::dap::dap_interface::DapInterface;
 use crate::widget::SourceListing;
-use egui::panel::TopBottomSide;
-use egui::{Align2, Button, Context, Id, Popup, PopupCloseBehavior, RectAlign, Ui, Widget, WidgetText};
+use egui::{
+    Align2, Button, Context, Id, Popup, PopupCloseBehavior, RectAlign, Ui, Widget, WidgetText,
+};
 use egui_dock::{DockArea, DockState, Style, TabViewer};
 use serde_json::json;
 use std::sync::Arc;
@@ -47,6 +48,7 @@ pub struct MemVisorUi {
     tabs: Vec<AppTab>,
     dock_state: DockState<AppTab>,
 
+    zero_t: Instant,
     last_render_t: Instant,
     render_time_acc: Duration,
     render_time_avg: Duration,
@@ -61,6 +63,7 @@ impl MemVisorUi {
             tabs: Vec::new(),
             dock_state: DockState::new(Vec::new()),
 
+            zero_t: Instant::now(),
             last_render_t: Instant::now(),
             render_time_acc: Duration::new(0, 0),
             render_time_avg: Duration::new(0, 0),
@@ -68,10 +71,10 @@ impl MemVisorUi {
         }
     }
 
-    pub fn update(&mut self, ctx: &Context, dap_interface: Arc<DapInterface>) {
+    pub fn update(&mut self, ctx: &Context, ui: &mut egui::Ui, dap_interface: Arc<DapInterface>) {
         let _span = tracy_client::span!("ui_update");
 
-        egui::TopBottomPanel::new(TopBottomSide::Top, Id::new("main-header")).show(ctx, |ui| {
+        egui::Panel::top(Id::new("main-header")).show_inside(ui, |ui| {
             ui.horizontal(|ui| {
                 let file_res = ui.button("File");
                 let popup_id = Id::new("main-file-popup");
@@ -84,13 +87,16 @@ impl MemVisorUi {
                     let res = dap_interface.start_dap("rust-gdb", ["-i", "dap"]);
                     if let Err(err) = res {
                         log::error!("Start DAP error: {err}");
-                    } else if let Err(e) = dap_interface.launch(json!({
+                    } else if let Err(e) = dap_interface.launch(
+                        json!({
                             "name": "launch",
                             "type": "gdb",
                             "request": "launch",
                             "program": "target/debug/memvisor",
                             "cwd": ".",
-                        }).to_string()) {
+                        })
+                        .to_string(),
+                    ) {
                         log::error!("Error: {e}");
                     } else {
                         self.debugging = true;
@@ -104,7 +110,8 @@ impl MemVisorUi {
                 }
 
                 Popup::menu(&file_res)
-                    .gap(4.0).align(RectAlign {
+                    .gap(4.0)
+                    .align(RectAlign {
                         parent: Align2::LEFT_BOTTOM,
                         child: Align2::LEFT_TOP,
                     })
@@ -116,22 +123,18 @@ impl MemVisorUi {
                                 .set_directory(std::env::current_dir().unwrap_or_default())
                                 .pick_file();
                             if let Some(file) = file {
+                                // Don't remove this comment, this is a clippy scarecrow
                                 if let Ok(listing) =
                                     SourceListing::load(Arc::clone(&dap_interface), &file)
                                 {
                                     //self.tabs.push(AppTab::Source(listing));
-                                    self.dock_state.push_to_focused_leaf(AppTab::Source(listing));
+                                    self.dock_state
+                                        .push_to_focused_leaf(AppTab::Source(listing));
                                 }
                             }
                         }
                     });
             });
-        });
-
-        egui::CentralPanel::default().show(ctx, |ui| {
-            DockArea::new(&mut self.dock_state)
-                .style(Style::from_egui(ui.style().as_ref()))
-                .show_inside(ui, &mut AppTabViewer);
         });
 
         self.render_time_acc += self.last_render_t.elapsed();
@@ -142,7 +145,7 @@ impl MemVisorUi {
             self.render_time_acc = Duration::new(0, 0);
         }
         self.last_render_t = Instant::now();
-        egui::TopBottomPanel::new(TopBottomSide::Bottom, Id::new("main-footer")).show(ctx, |ui| {
+        egui::Panel::bottom(Id::new("main-footer")).show_inside(ui, |ui| {
             ui.horizontal(|ui| {
                 if self.render_time_avg.as_millis() < 10000 {
                     ui.label(format!(
@@ -153,6 +156,12 @@ impl MemVisorUi {
                     ui.label("Average frame time: :D");
                 }
             });
+        });
+
+        egui::CentralPanel::default().show_inside(ui, |ui| {
+            DockArea::new(&mut self.dock_state)
+                .style(Style::from_egui(ui.style().as_ref()))
+                .show_inside(ui, &mut AppTabViewer);
         });
     }
 }

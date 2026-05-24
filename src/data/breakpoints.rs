@@ -25,7 +25,7 @@ pub struct CodeBreakpoint {
     // The Arc is so that we can clone this crap. It should never change anyway
     pub file: Arc<PathBuf>,
     pub lineno: usize,
-    pub breakpoint_id: usize,
+    pub breakpoint_id: u64,
 }
 
 /// For each line of the file (usize), we can have a breakpoint
@@ -35,7 +35,7 @@ type ProtectedFileBreakpoints = RwLock<FileBreakpoints>;
 /// A project has breakpoints of several files
 type ProjectBreakpoints = HashMap<PathBuf, ProtectedFileBreakpoints>;
 
-type DapBreakpointTable = HashMap<usize, DapBreakpoint>;
+type DapBreakpointTable = HashMap<u64, DapBreakpoint>;
 
 #[derive(Default)]
 pub struct BreakpointStore {
@@ -120,7 +120,7 @@ impl BreakpointStore {
         }
     }
 
-    pub fn add_breakpoint_data(&self, data: DapBreakpoint) -> Option<usize> {
+    pub fn add_breakpoint_data(&self, data: DapBreakpoint) -> Option<u64> {
         let id = data.id?;
         let source = data.source.as_ref()?.path.as_ref()?;
         let line = data.line?;
@@ -138,7 +138,7 @@ impl BreakpointStore {
         Some(id)
     }
 
-    pub fn update_breakpoint_data(&self, data: DapBreakpoint) -> Option<usize> {
+    pub fn update_breakpoint_data(&self, data: DapBreakpoint) -> Option<u64> {
         let id = data.id?;
 
         let mut data_w = self.data.write().unwrap();
@@ -147,15 +147,26 @@ impl BreakpointStore {
         Some(id)
     }
 
-    pub fn get_breakpoint_data(&self, id: usize) -> Option<DapBreakpoint> {
+    pub fn get_breakpoint_data(&self, id: u64) -> Option<DapBreakpoint> {
         let data_r = self.data.read().unwrap();
 
         data_r.get(&id).cloned()
     }
 
-    pub fn delete_breakpoint_data(&self, id: usize) -> Option<DapBreakpoint> {
+    pub fn delete_breakpoint_data(&self, id: u64) -> Option<DapBreakpoint> {
         let mut data_w = self.data.write().unwrap();
 
         data_w.remove(&id)
+    }
+
+    pub fn get_breakpoint_for_dap_id(&self, id: u64) -> Option<Breakpoint> {
+        let breakpoint_data = self.get_breakpoint_data(id)?;
+        let source = breakpoint_data.source.as_ref()?.path.as_ref()?.as_str();
+        let lineno = breakpoint_data.line?;
+
+        let files_r = self.points.read().unwrap();
+        let file_bps_r = files_r.get(Path::new(source))?.read().unwrap();
+
+        file_bps_r.get(&lineno).cloned().map(Breakpoint::Source)
     }
 }

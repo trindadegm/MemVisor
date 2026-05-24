@@ -71,10 +71,7 @@ pub enum RequestMessage {
         arguments: serde_json::Value,
     },
     #[serde(rename = "next")]
-    Next {
-        seq: u64,
-        arguments: NextArguments,
-    },
+    Next { seq: u64, arguments: NextArguments },
     Scopes {
         seq: u64,
         arguments: ScopesArguments,
@@ -87,6 +84,11 @@ pub enum RequestMessage {
     SetBreakpoints {
         seq: u64,
         arguments: SetBreakpointsArguments,
+    },
+    #[serde(rename = "stackTrace")]
+    StackTrace {
+        seq: u64,
+        arguments: StackTraceArguments,
     },
     Variables {
         seq: u64,
@@ -125,12 +127,19 @@ pub enum ResponseMessage {
         success: bool,
         body: VariablesResponseBody,
     },
-    #[serde(rename="setBreakpoints")]
+    #[serde(rename = "setBreakpoints")]
     SetBreakpoints {
         seq: u64,
         request_seq: u64,
         success: bool,
         body: SetBreakpointsResponseBody,
+    },
+    #[serde(rename = "stackTrace")]
+    StackTrace {
+        seq: u64,
+        request_seq: u64,
+        success: bool,
+        body: StackTraceResponseBody,
     },
     #[serde(other)]
     Unknown,
@@ -208,6 +217,39 @@ pub struct SetBreakpointsResponseBody {
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
+pub struct StackTraceResponseBody {
+    /// If empty, it means there are no stack frames available.
+    #[serde(rename = "stackFrames")]
+    pub stack_frames: Vec<StackFrame>,
+    /// The total numver of frames available in the stack. If ommited or it it's grater than the
+    /// available frames, the client is expected to reqiest frames until a request returns less
+    /// frames than requested (which indicates the end of the stack). Returning monotonically
+    /// increasing `totalFrames` values for subsequent requests can be used to enforse paging in
+    /// the client.
+    #[serde(rename = "totalFrames")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_frames: Option<usize>,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug)]
+pub struct StackTraceArguments {
+    /// Thread from which to retrieve frames.
+    #[serde(rename = "threadId")]
+    pub thread_id: u64,
+    /// The index of the first frame to return; if ommited, frames start at 0
+    #[serde(rename = "startFrame")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_frame: Option<u64>,
+    /// The maximum number of frames to return. If levels is not specified or 0, all frames are
+    /// returned.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub levels: Option<u64>,
+    /// Specifies details on how to format the returned stack frame name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<StackFrameFormat>,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub struct VariablesArguments {
     /// The variable for which to retrieve it's children
     #[serde(rename = "variablesReference")]
@@ -223,24 +265,13 @@ pub struct VariablesResponseBody {
 #[serde(tag = "event")]
 pub enum DapEvent {
     #[serde(rename = "breakpoint")]
-    Breakpoint {
-        seq: u64,
-        body: BreakpointEvent,
-    },
+    Breakpoint { seq: u64, body: BreakpointEvent },
     #[serde(rename = "output")]
-    Output {
-        seq: u64,
-        body: OutputEvent,
-    },
+    Output { seq: u64, body: OutputEvent },
     #[serde(rename = "stopped")]
-    Stopped {
-        seq: u64,
-        body: StoppedEvent,
-    },
+    Stopped { seq: u64, body: StoppedEvent },
     #[serde(rename = "terminated")]
-    Terminated {
-        seq: u64,
-    },
+    Terminated { seq: u64 },
     #[serde(other)]
     Unknown,
 }
@@ -330,6 +361,5 @@ mod tests {
     }
 
     #[test]
-    fn test_serialize_response() {
-    }
+    fn test_serialize_response() {}
 }

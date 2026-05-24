@@ -1,9 +1,8 @@
 // TODO: We need to implement this eventually
 #![allow(unused)]
+use egui::{CentralPanel, Id, Response, TopBottomPanel, Ui, Widget};
 use std::fs;
 use std::path::PathBuf;
-use egui::{CentralPanel, Id, Response, TopBottomPanel, Ui, Widget};
-use egui::panel::TopBottomSide;
 
 pub struct FileEntry {
     path: PathBuf,

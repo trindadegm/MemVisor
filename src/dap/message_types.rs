@@ -4,7 +4,7 @@ use crate::data::types::DebugPointer;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Breakpoint {
-    pub id: Option<usize>,
+    pub id: Option<u64>,
     /// If true, then the breakpoint was set, otherwise it is pending, and may or may not be set by
     /// the debugger later. In which case, the debugger might send an update message setting
     /// verified to true.
@@ -37,7 +37,7 @@ pub struct Breakpoint {
     /// The offset from the instruction reference. Can be negative.
     #[serde(rename = "offset")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub offset: Option<isize>,
+    pub offset: Option<i64>,
     /// An explanation of why a breakpoint could not be verified.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<BreakpointUnverifiedReason>,
@@ -176,7 +176,7 @@ pub struct Source {
     /// This is only valid for one session.
     #[serde(rename = "sourceReference")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub source_reference: Option<usize>,
+    pub source_reference: Option<u64>,
     /// A hint for how to present the source in the UI
     /// [SourcePresentationHint::Deemphasize] can be used to indicate that the source is not
     /// available or that it is skipped on stepping.
@@ -225,6 +225,73 @@ pub enum SourcePresentationHint {
     Emphasize,
     #[serde(rename = "deemphasize")]
     Deemphasize,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct StackFrame {
+    pub id: u64,
+    /// The name of the stack frame.
+    pub name: String,
+    /// The source of the frame.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<Source>,
+    /// The line within the source of the frame. If the `source` attribute is missing, the value 0
+    /// should be ignored by the client.
+    pub line: usize,
+    /// Start position of the range covered by the stack frame. If the `source` attribute is
+    /// missing, the velue 0 should be ignored by the client.
+    pub column: usize,
+    #[serde(rename = "endLine")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end_line: Option<usize>,
+    #[serde(rename = "endColumn")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end_column: Option<usize>,
+    /// Indicates whether this frame can be restarted with the `restartFrame` request.
+    #[serde(rename = "canRestart")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub can_restart: Option<bool>,
+    /// A memory reference for the current instruction pointer in this frame,
+    #[serde(rename = "instructionPointerReference")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub instruction_pointer_reference: Option<DebugPointer>,
+    /// The module associated with this frame, if any
+    #[serde(rename = "moduleId")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub module_id: Option<String>,
+    /// A hint for how to present this frame in the UI
+    #[serde(rename = "presentationHint")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub presentation_hint: Option<PresentationHint>,
+}
+
+#[derive(Deserialize, Serialize, Default, Clone, Copy, Debug)]
+pub struct StackFrameFormat {
+    /// Displays paramters for the stack frame.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parameters: Option<bool>, 
+    /// Displays the types of parameters for the stack frame.
+    #[serde(rename = "parameterTypes")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parameter_types: Option<bool>, 
+    /// Displays the names of parameters for the stack frame.
+    #[serde(rename = "parameterNames")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parameter_names: Option<bool>, 
+    /// Displays the values of parameters for the stack frame.
+    #[serde(rename = "parameterValues")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parameter_values: Option<bool>, 
+    /// Displays the line number of the stack frame.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<bool>, 
+    /// Displays the module of the stack frame.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub module: Option<bool>, 
+    /// Includes all stack frames, including those the debug adapter might otherwise hide.
+    #[serde(rename = "includeAll")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_all: Option<bool>, 
 }
 
 #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
