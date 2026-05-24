@@ -1,6 +1,6 @@
-use crate::dap::dap_interface::DapInterface;
+use crate::dap::dap_interface::{DapInterface, DebugState};
 use crate::data::breakpoints::Breakpoint;
-use egui::{Response, ScrollArea, Ui, Widget};
+use egui::{Response, ScrollArea, TextFormat, Ui, Widget};
 use epaint::FontId;
 use epaint::text::LayoutJob;
 use std::ffi::OsStr;
@@ -58,6 +58,21 @@ impl Widget for &mut SourceListing {
     fn ui(self, ui: &mut Ui) -> Response {
         let _span = tracy_client::span!("ui_update_source_listing");
 
+        let debug_state = self.dap_interface.get_debug_state();
+        let mut stopped_at_line = None;
+
+        match debug_state {
+            DebugState::Stopped {
+                file: Some(file),
+                lineno,
+                ..
+            } if file == self.source_code.path => {
+                stopped_at_line = lineno;
+            }
+            DebugState::Paused => {}
+            _ => {}
+        }
+
         self.dap_interface
             .get_file_breakpoints(&self.source_code.path, &mut self.list_breakpoints);
 
@@ -87,33 +102,52 @@ impl Widget for &mut SourceListing {
                     FontId::monospace(self.line_height_px),
                     ui.style().visuals.widgets.active.fg_stroke.color,
                 );
-                ui.horizontal(|ui| {
-                    let set_bp_res = ui.add_sized(
-                        [self.line_height_px, self.line_height_px],
-                        egui::Button::selectable(has_breakpoint, "O"),
-                    );
-                    if set_bp_res.clicked() {
-                        let dap_result = if let Some(bp) = line_breakpoint {
-                            self.dap_interface
-                                .remove_breakpoint(&Breakpoint::Source(bp.clone()))
-                        } else {
-                            let path = self.source_code.path.clone();
-                            self.dap_interface
-                                .put_breakpoint(Breakpoint::on_source(path, line_index + 1))
-                        };
 
-                        if let Err(e) = dap_result {
-                            log::error!("{e}");
-                        }
-                    }
-                    ui.horizontal(|ui| {
-                        ui.set_width(30.0);
-                        ui.with_layout(egui::Layout::right_to_left(Default::default()), |ui| {
-                            ui.label(lineno.to_string());
+                egui::Frame::new()
+                    .fill(
+                        if stopped_at_line
+                            .map(|stopped_lineno| stopped_lineno == lineno)
+                            .unwrap_or(false)
+                        {
+                            egui::Color32::from_rgb(24, 32, 72)
+                        } else {
+                            ui.style().visuals.window_fill
+                        },
+                    )
+                    .inner_margin(0.0)
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.set_width(ui.available_width());
+                            let set_bp_res = ui.add_sized(
+                                [self.line_height_px, self.line_height_px],
+                                egui::Button::selectable(has_breakpoint, "O"),
+                            );
+                            if set_bp_res.clicked() {
+                                let dap_result = if let Some(bp) = line_breakpoint {
+                                    self.dap_interface
+                                        .remove_breakpoint(&Breakpoint::Source(bp.clone()))
+                                } else {
+                                    let path = self.source_code.path.clone();
+                                    self.dap_interface
+                                        .put_breakpoint(Breakpoint::on_source(path, line_index + 1))
+                                };
+
+                                if let Err(e) = dap_result {
+                                    log::error!("{e}");
+                                }
+                            }
+                            ui.horizontal(|ui| {
+                                ui.set_width(30.0);
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(Default::default()),
+                                    |ui| {
+                                        ui.label(lineno.to_string());
+                                    },
+                                );
+                            });
+                            ui.label(job);
                         });
                     });
-                    ui.label(job);
-                });
             }
         });
 
