@@ -1,6 +1,6 @@
 use crate::dap::dap_interface::{DapInterface, DebugState};
 use crate::data::breakpoints::Breakpoint;
-use egui::{Response, ScrollArea, TextFormat, Ui, Widget};
+use egui::{Response, ScrollArea, Ui, UiBuilder, Widget};
 use epaint::FontId;
 use epaint::text::LayoutJob;
 use std::ffi::OsStr;
@@ -21,6 +21,9 @@ pub struct SourceListing {
     list_breakpoints: Vec<Breakpoint>,
     lines: Vec<String>,
     line_height_px: f32,
+
+    scroll_event_target: Option<usize>,
+    last_debug_highlighted_line: usize,
 }
 
 impl SourceListing {
@@ -43,6 +46,9 @@ impl SourceListing {
             list_breakpoints: Vec::new(),
             lines,
             line_height_px: DEFAULT_LINE_HEIGHT_PX,
+
+            scroll_event_target: None,
+            last_debug_highlighted_line: 0,
         })
     }
 
@@ -78,10 +84,43 @@ impl Widget for &mut SourceListing {
 
         ui.set_width(ui.available_width());
 
+        let fresh_scroll_event = if let Some(lineno) = stopped_at_line
+            && lineno != self.last_debug_highlighted_line
+        {
+            self.last_debug_highlighted_line = lineno;
+            self.scroll_event_target = Some(lineno - 1);
+            true
+        } else {
+            false
+        };
+
         ScrollArea::both().show_rows(ui, self.line_height_px, self.lines.len(), |ui, range| {
             ui.set_width(ui.available_width());
 
             let lines_in_range = &self.lines[range.clone()];
+
+            let scroll_target_index = match self.scroll_event_target {
+                Some(scroll_final_target) if range.contains(&scroll_final_target) => {
+                    self.scroll_event_target = None;
+                    // If the line is in range THE MOMENT the scroll event happens, we don't trigger scrolling
+                    // Otherwise we will keep scrolling all the way to it, not only until it gets "in range".
+                    // This is because an item can be in range and not exactly be showing. This is not
+                    // perfect but it is good enough
+                    if fresh_scroll_event {
+                        None
+                    } else {
+                        Some(scroll_final_target)
+                    }
+                }
+                Some(scroll_final_target) => {
+                    if scroll_final_target < range.start {
+                        Some(range.start)
+                    } else {
+                        Some(range.end - 1)
+                    }
+                }
+                None => None,
+            };
 
             for (i, line) in lines_in_range.iter().enumerate() {
                 let line_index = i + range.start;
@@ -145,7 +184,16 @@ impl Widget for &mut SourceListing {
                                     },
                                 );
                             });
-                            ui.label(job);
+                            let job_res = ui.label(job);
+                            if let Some(scroll_target_index) = scroll_target_index
+                                && line_index == scroll_target_index
+                            {
+                                log::debug!("SCROLL TO {line_index} {}", line);
+                                job_res.scroll_to_me_animation(
+                                    Some(egui::Align::Center),
+                                    egui::style::ScrollAnimation::none(),
+                                );
+                            }
                         });
                     });
             }

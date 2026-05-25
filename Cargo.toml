@@ -22,7 +22,7 @@ utally = "1.0"
 winit = "0.30"
 
 [dependencies.tracy-client]
-version = "0.18.3"
+version = "0.18.4"
 default-features = false
 
 [features]

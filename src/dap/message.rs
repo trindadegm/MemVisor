@@ -61,6 +61,18 @@ pub enum RequestMessage {
         /// Just send None for now.
         arguments: Option<serde_json::Value>,
     },
+    /// This requests the debugger to resume execution of all threads.
+    ///
+    /// In case the debugger supports single thread execution, setting the `single_thread` argument
+    /// to true resumes only the specified thread.
+    ///
+    /// If not all threads are resumed, the `all_threads_continued` attribute of the response
+    /// should be set to false.
+    #[serde(rename = "continue")]
+    Continue {
+        seq: u64,
+        arguments: ContinueArguments,
+    },
     /// This launch request is sent from the client to the debug adapter to start
     /// the debuggee with or without debugging (if noDebug is true).
     ///
@@ -72,6 +84,7 @@ pub enum RequestMessage {
     },
     #[serde(rename = "next")]
     Next { seq: u64, arguments: NextArguments },
+    #[serde(rename = "scopes")]
     Scopes {
         seq: u64,
         arguments: ScopesArguments,
@@ -167,6 +180,19 @@ pub struct InitializeArguments {
     pub adapter_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub locale: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug)]
+pub struct ContinueArguments {
+    /// This specifies a thread to be resumed when `singhle_thread` is set to true,
+    /// if `single_thread` is set to false, this attribute is ignored.
+    #[serde(rename = "threadId")]
+    pub thread_id: u64,
+
+    /// If set to true, only the thread specified by `thread_id` should be resumed.
+    #[serde(rename = "singleThread")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub single_thread: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]

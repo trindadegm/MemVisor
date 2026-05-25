@@ -1,4 +1,4 @@
-use crate::dap::dap_interface::DapInterface;
+use crate::dap::dap_interface::{ContinueMode, DapInterface};
 use crate::widget::SourceListing;
 use egui::{
     Align2, Button, Context, Id, Popup, PopupCloseBehavior, RectAlign, Ui, Widget, WidgetText,
@@ -106,6 +106,12 @@ impl MemVisorUi {
                 if ui.button("Step").clicked() {
                     dap_interface
                         .request_next()
+                        .expect("TODO remove this panic");
+                }
+
+                if ui.button("Continue").clicked() {
+                    dap_interface
+                        .request_continue(ContinueMode::AllThreads)
                         .expect("TODO remove this panic");
                 }
 

@@ -1,6 +1,7 @@
 use crate::dap::message::{
-    BreakpointEvent, BreakpointEventReason, DapEvent, NextArguments, OutputEvent, ProtocolMessage,
-    RequestMessage, ResponseMessage, SetBreakpointsArguments, StackTraceArguments,
+    BreakpointEvent, BreakpointEventReason, ContinueArguments, DapEvent, NextArguments,
+    OutputEvent, ProtocolMessage, RequestMessage, ResponseMessage, SetBreakpointsArguments,
+    StackTraceArguments,
 };
 use crate::dap::message_types::{
     self, OutputEventCategory, SteppingGranularity, StoppedEventReason,
@@ -12,6 +13,11 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 
 type ProtectedOption<T> = Arc<RwLock<Option<T>>>;
+
+pub enum ContinueMode {
+    AllThreads,
+    SingleThread(u64),
+}
 
 #[derive(Clone, Default, Debug)]
 pub enum DebugState {
@@ -472,6 +478,28 @@ impl DapInterface {
                     thread_id,
                     single_thread,
                     stepping_granularity: Some(SteppingGranularity::Line),
+                },
+            }))
+        } else {
+            Err(DapError::NoDapInstance)
+        }
+    }
+
+    pub fn request_continue(&self, mode: ContinueMode) -> Result<(), DapError> {
+        let (thread_id, single_thread) = match mode {
+            ContinueMode::AllThreads => (0, false),
+            ContinueMode::SingleThread(thread_id) => (thread_id, true),
+        };
+
+        let mut instance_w = self.instance.write().unwrap();
+        if let Some(instance) = instance_w.as_mut() {
+            let seq = instance.next_seq();
+
+            instance.send_message(&ProtocolMessage::Request(RequestMessage::Continue {
+                seq,
+                arguments: ContinueArguments {
+                    thread_id,
+                    single_thread: Some(single_thread),
                 },
             }))
         } else {
