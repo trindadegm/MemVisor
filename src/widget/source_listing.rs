@@ -188,7 +188,6 @@ impl Widget for &mut SourceListing {
                             if let Some(scroll_target_index) = scroll_target_index
                                 && line_index == scroll_target_index
                             {
-                                log::debug!("SCROLL TO {line_index} {}", line);
                                 job_res.scroll_to_me_animation(
                                     Some(egui::Align::Center),
                                     egui::style::ScrollAnimation::none(),
